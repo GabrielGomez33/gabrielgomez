@@ -5,12 +5,9 @@ The pipeline (`.github/workflows/ci-cd.yml`) has two jobs:
 1. **Quality Gates** — runs on every push/PR to `master`/`develop`. Type-checks
    and builds both `server` and `client`. No infrastructure needed.
 2. **Deploy to Production** — SSH into the host, build, PM2 restart, health
-   check, auto-rollback. Runs only when **both** are true:
-   - the push is to `master` (or a manual dispatch with `deploy: true`), **and**
-   - the repo variable `DEPLOY_ENABLED` == `true`.
-
-So until you finish the steps below, master pushes stay **green** (quality gates
-pass, deploy is *skipped* — not failed).
+   check, auto-rollback. Runs on a push to `master` (or a manual dispatch with
+   `deploy: true`). It needs the secrets below; a preflight step fails with a
+   clear message if any are missing.
 
 ---
 
@@ -62,12 +59,6 @@ Secrets (tab: *Secrets*):
 | `SERVER_SSH_KEY` | private deploy key (Option B above) |
 | `GABRIELGOMEZ_DEPLOY_PATH` | `/var/www/GabrielGomez` (checkout dir == web root) |
 
-Variables (tab: *Variables*):
-
-| Variable | Value |
-| --- | --- |
-| `DEPLOY_ENABLED` | `true` (set this **last**, after step 3) |
-
 ---
 
 ## 3. First-time host bootstrap
@@ -87,10 +78,11 @@ npm ci && npm run deploy        # publishes dist/* into /var/www/GabrielGomez
 
 Then add the Apache vhost block (see the root `README.md`) and reload Apache.
 
-## 4. Flip the switch
+## 4. Deploy
 
-Set the `DEPLOY_ENABLED` variable to `true`. The next push to `master` (or a
-manual **Run workflow → deploy**) will deploy, health-check, and tag a release.
+Push to `master` (or **Actions → Run workflow → deploy: true**). The deploy job
+builds, PM2-restarts `gabrielgomez-server`, health-checks it, tags a release,
+and rolls back automatically if the health check fails.
 
 ---
 
