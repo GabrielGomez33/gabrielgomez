@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express, { type Request, type Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import contactRouter from './routes/contact';
 
 // =============================================================================
 // Gabriel Gomez API
@@ -20,6 +21,9 @@ const PORT = Number(process.env.GABRIELGOMEZ_PORT ?? 8448);
 const BASE = '/GabrielGomez/api';
 
 app.disable('x-powered-by');
+// Behind Apache's reverse proxy — trust X-Forwarded-For so req.ip is the real
+// client address (used by the contact rate limiter).
+app.set('trust proxy', true);
 app.use(helmet());
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
@@ -37,6 +41,9 @@ router.get('/health', (_req: Request, res: Response) => {
     time: new Date().toISOString(),
   });
 });
+
+// -- Contact / inquiry (Resend email) ----------------------------------------
+router.use('/contact', contactRouter);
 
 // -- Instagram feed (Phase 2 placeholder) ------------------------------------
 // Will proxy the Instagram Graph API server-side with a cached, token-backed
