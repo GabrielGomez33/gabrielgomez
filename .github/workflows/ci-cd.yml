@@ -186,6 +186,7 @@ jobs:
           case "$DEPLOY_PATH" in ''|-*) echo "GABRIELGOMEZ_DEPLOY_PATH is empty or malformed (value shown in brackets): [$DEPLOY_PATH] — it must be an absolute path like /var/www/GabrielGomez"; exit 1;; esac
           [ -d "$DEPLOY_PATH" ] || { echo "Deploy path not found on host: $DEPLOY_PATH"; exit 1; }
           cd "$DEPLOY_PATH"
+          [ -d .git ] || { echo "Host checkout not bootstrapped: $DEPLOY_PATH is not a git repository. Clone the repo there first (see docs/DEPLOYMENT.md)."; exit 1; }
           CURRENT_COMMIT=$(git rev-parse HEAD)
           echo "Pre-deploy commit: $CURRENT_COMMIT"
           echo "$CURRENT_COMMIT" > /tmp/.gabrielgomez-rollback-commit
@@ -205,6 +206,7 @@ jobs:
           case "$DEPLOY_PATH" in ''|-*) echo "GABRIELGOMEZ_DEPLOY_PATH is empty or malformed (value shown in brackets): [$DEPLOY_PATH] — it must be an absolute path like /var/www/GabrielGomez"; exit 1;; esac
           [ -d "$DEPLOY_PATH" ] || { echo "Deploy path not found on host: $DEPLOY_PATH"; exit 1; }
           cd "$DEPLOY_PATH"
+          [ -d .git ] || { echo "Host checkout not bootstrapped: $DEPLOY_PATH is not a git repository. Clone the repo there first (see docs/DEPLOYMENT.md)."; exit 1; }
 
           echo "[1/6] Pulling latest code..."
           git fetch origin master
