@@ -31,7 +31,8 @@ export interface Project {
   role: string
   blurb: string
   stack: string[]
-  href?: string
+  github?: string
+  live?: string
 }
 
 export const projects: Project[] = [
@@ -41,7 +42,17 @@ export const projects: Project[] = [
     blurb:
       'A personal-intelligence platform for self-reflection, peer review, and collective insight. React 19 PWA with real-time group chat, in-browser ML, and a hardened Node/Express + MySQL backend running a fleet of background workers.',
     stack: ['React 19', 'TypeScript', 'Node/Express', 'MySQL', 'Redis', 'WebSockets', 'PM2'],
-    href: 'https://github.com/GabrielGomez33/Mirror',
+    github: 'https://github.com/GabrielGomez33/Mirror',
+    live: 'https://www.theundergroundrailroad.world/Mirror',
+  },
+  {
+    name: 'CamBridge',
+    role: 'Real-time WebRTC',
+    blurb:
+      'Turns any phone or laptop into a wireless, peer-to-peer camera for OBS — no app, no capture card. WebRTC media flows device→OBS directly (the server never touches a frame); a tiny Node/ws matchmaker handles signaling, with an always-canvas camera pipeline, per-connection telemetry, and passcode-gated links.',
+    stack: ['React', 'TypeScript', 'WebRTC', 'WebSockets', 'Node/Express', 'MySQL', 'PM2'],
+    github: 'https://github.com/GabrielGomez33/CamBridge',
+    live: 'https://www.theundergroundrailroad.world/cambridge/',
   },
   {
     name: 'DINA',
@@ -49,7 +60,7 @@ export const projects: Project[] = [
     blurb:
       'A message-driven AI orchestrator running local LLM inference on GPU. Custom protocol, priority queues, complexity-aware model routing, and dual exact/semantic caching — built for reliability and observable performance.',
     stack: ['TypeScript', 'Ollama', 'Redis', 'WebSockets', 'CUDA', 'PM2'],
-    href: 'https://github.com/GabrielGomez33/dina-server',
+    github: 'https://github.com/GabrielGomez33/dina-server',
   },
 ]
 

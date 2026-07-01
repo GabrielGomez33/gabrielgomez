@@ -15,12 +15,7 @@ export function Projects() {
         <div className="work__list">
           {projects.map((project, i) => (
             <Reveal as="article" key={project.name} className="project" delay={i * 100}>
-              <a
-                className="project__link"
-                href={project.href}
-                target="_blank"
-                rel="noreferrer noopener"
-              >
+              <div className="project__inner">
                 <div className="project__head">
                   <h3 className="project__name">{project.name}</h3>
                   <span className="project__role">{project.role}</span>
@@ -31,8 +26,29 @@ export function Projects() {
                     <li key={tech}>{tech}</li>
                   ))}
                 </ul>
-                <span className="project__cta">View source &rarr;</span>
-              </a>
+                <div className="project__links">
+                  {project.github && (
+                    <a
+                      className="project__link-btn"
+                      href={project.github}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                    >
+                      Code <span aria-hidden>&#8599;</span>
+                    </a>
+                  )}
+                  {project.live && (
+                    <a
+                      className="project__link-btn project__link-btn--live"
+                      href={project.live}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                    >
+                      Live <span aria-hidden>&#8599;</span>
+                    </a>
+                  )}
+                </div>
+              </div>
             </Reveal>
           ))}
         </div>
