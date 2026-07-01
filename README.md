@@ -42,10 +42,9 @@ cd server && npm install && npm run build && npm start   # 127.0.0.1:8448
 
 ## Production deploy
 
-CI/CD runs automatically on push to `master`. The **deploy** job is gated on the
-`DEPLOY_ENABLED` repo variable, so master pushes stay green (quality gates pass,
-deploy is skipped) until infra is configured. Full walkthrough — including SSH
-deploy-key setup — is in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+CI/CD runs automatically on push to `master` (quality gates on every push/PR;
+deploy on `master`). Full walkthrough — including SSH deploy-key setup — is in
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 Manual/first-time setup on the host:
 
@@ -57,9 +56,6 @@ Manual/first-time setup on the host:
 | `SERVER_USER` | SSH user (shared) |
 | `SERVER_SSH_KEY` | private deploy key (shared) |
 | `GABRIELGOMEZ_DEPLOY_PATH` | repo checkout on the host — `/var/www/GabrielGomez` (also the web root) |
-
-Plus one **repo variable** (Actions → Variables): `DEPLOY_ENABLED` = `true` —
-set this last, once the secrets exist and the host is bootstrapped.
 
 ### 2. First-time host bootstrap
 
