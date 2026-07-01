@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './env'; // must be first — loads .env from the server root before anything reads process.env
 import express, { type Request, type Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -66,6 +66,11 @@ app.use((_req: Request, res: Response) => {
 
 const server = app.listen(PORT, '127.0.0.1', () => {
   console.log(`[gabrielgomez-server] listening on 127.0.0.1:${PORT} (base ${BASE})`);
+  console.log(
+    `[gabrielgomez-server] email ${
+      process.env.RESEND_API_KEY ? 'configured (Resend)' : 'NOT configured (RESEND_API_KEY missing)'
+    }`,
+  );
 });
 
 // Graceful shutdown for PM2 (shutdown_with_message + SIGINT).
