@@ -23,22 +23,29 @@ secrets as `mirror-server` and `admin`. Two options:
 Copy the same three secret values already configured on the Admin repo into this
 repo (GitHub secrets are per-repo, so they must be re-entered here).
 
-### Option B — dedicated deploy key
-On any machine, generate a keypair and install it on the host:
+### Option B — dedicated deploy key (recommended for this repo)
+On your local machine, generate a keypair and install it on the host:
 
 ```bash
-# Generate (no passphrase, so CI can use it non-interactively)
-ssh-keygen -t ed25519 -C "gabrielgomez-deploy" -f ./gabrielgomez_deploy -N ""
+# 1. Generate (no passphrase, so CI can use it non-interactively)
+ssh-keygen -t ed25519 -C "gabrielgomez-deploy@github-actions" \
+  -f ~/.ssh/gabrielgomez_deploy -N ""
 
-# Add the PUBLIC key to the deploy user's authorized_keys on the host
-ssh-copy-id -i ./gabrielgomez_deploy.pub <SERVER_USER>@<SERVER_HOST>
-# (or append the contents of gabrielgomez_deploy.pub to ~/.ssh/authorized_keys)
+# 2. Install the PUBLIC key for the administrator user on the host
+ssh-copy-id -i ~/.ssh/gabrielgomez_deploy.pub administrator@24.39.41.126
+#   (manual fallback:)
+#   cat ~/.ssh/gabrielgomez_deploy.pub | ssh administrator@24.39.41.126 \
+#     'mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'
 
-# The PRIVATE key (contents of ./gabrielgomez_deploy) becomes SERVER_SSH_KEY.
-cat ./gabrielgomez_deploy
+# 3. Test it
+ssh -i ~/.ssh/gabrielgomez_deploy administrator@24.39.41.126 'whoami && sudo pm2 -v'
+
+# 4. The PRIVATE key (full output incl. BEGIN/END lines) becomes SERVER_SSH_KEY.
+cat ~/.ssh/gabrielgomez_deploy
 ```
 
-> Never commit the private key. It lives only in GitHub Secrets.
+> Never commit the private key. It lives only in GitHub Secrets. The `.pub`
+> goes on the server; the private key goes in `SERVER_SSH_KEY`.
 
 ---
 
@@ -50,10 +57,10 @@ Secrets (tab: *Secrets*):
 
 | Secret | Value |
 | --- | --- |
-| `SERVER_HOST` | production host (same as Admin/mirror-server) |
-| `SERVER_USER` | SSH user (same) |
-| `SERVER_SSH_KEY` | private deploy key (same, or Option B above) |
-| `GABRIELGOMEZ_DEPLOY_PATH` | repo checkout path on the host, e.g. `/root/apps/gabrielgomez` |
+| `SERVER_HOST` | `24.39.41.126` |
+| `SERVER_USER` | `administrator` |
+| `SERVER_SSH_KEY` | private deploy key (Option B above) |
+| `GABRIELGOMEZ_DEPLOY_PATH` | `/var/www/GabrielGomez` (checkout dir == web root) |
 
 Variables (tab: *Variables*):
 
@@ -65,15 +72,17 @@ Variables (tab: *Variables*):
 
 ## 3. First-time host bootstrap
 
+# The checkout dir IS the web root (Admin pattern). Apache denies the source/
+# VCS subtrees (see the root README's vhost block), so only the built SPA shows.
 ```bash
-git clone https://github.com/GabrielGomez33/gabrielgomez /root/apps/gabrielgomez
-cd /root/apps/gabrielgomez/server
+git clone https://github.com/GabrielGomez33/gabrielgomez /var/www/GabrielGomez
+cd /var/www/GabrielGomez/server
 npm ci && npm run build && npm prune --omit=dev
 cp .env.example .env            # adjust if needed (defaults are fine for Phase 1)
 sudo pm2 start ecosystem.config.js && sudo pm2 save
 
 cd ../client
-npm ci && npm run deploy        # publishes dist/* → /var/www/GabrielGomez
+npm ci && npm run deploy        # publishes dist/* into /var/www/GabrielGomez
 ```
 
 Then add the Apache vhost block (see the root `README.md`) and reload Apache.

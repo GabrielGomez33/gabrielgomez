@@ -56,20 +56,22 @@ Manual/first-time setup on the host:
 | `SERVER_HOST` | production host (shared with mirror-server / admin) |
 | `SERVER_USER` | SSH user (shared) |
 | `SERVER_SSH_KEY` | private deploy key (shared) |
-| `GABRIELGOMEZ_DEPLOY_PATH` | repo checkout on the host, e.g. `/root/apps/gabrielgomez` |
+| `GABRIELGOMEZ_DEPLOY_PATH` | repo checkout on the host — `/var/www/GabrielGomez` (also the web root) |
 
 Plus one **repo variable** (Actions → Variables): `DEPLOY_ENABLED` = `true` —
 set this last, once the secrets exist and the host is bootstrapped.
 
 ### 2. First-time host bootstrap
 
+# The checkout dir IS the web root (Admin pattern); the client publishes its
+# built dist/* into the same dir, and Apache serves only the built SPA.
 ```bash
-git clone <repo> /root/apps/gabrielgomez          # == GABRIELGOMEZ_DEPLOY_PATH
-cd /root/apps/gabrielgomez/server
+git clone <repo> /var/www/GabrielGomez            # == GABRIELGOMEZ_DEPLOY_PATH
+cd /var/www/GabrielGomez/server
 npm ci && npm run build && npm prune --omit=dev
 cp .env.example .env                               # fill in as needed
 sudo pm2 start ecosystem.config.js && sudo pm2 save
-cd ../client && npm ci && npm run deploy           # publishes to /var/www/GabrielGomez
+cd ../client && npm ci && npm run deploy           # publishes dist/* into /var/www/GabrielGomez
 ```
 
 ### 3. Apache — add to the `*:443` VirtualHost
@@ -96,6 +98,12 @@ Place the API `ProxyPass` **before** the static `Alias` (same ordering as
         RewriteCond %{REQUEST_FILENAME} !-d
         RewriteRule ^ /GabrielGomez/index.html [L]
     </Directory>
+
+    # The checkout lives under the web root, so deny the source/VCS/tooling
+    # subtrees — only the built SPA (index.html + assets/) should be reachable.
+    <DirectoryMatch "^/var/www/GabrielGomez/(\.git|\.github|server|client|node_modules|docs)">
+        Require all denied
+    </DirectoryMatch>
 ```
 
 Then `sudo apache2ctl configtest && sudo systemctl reload apache2`.
