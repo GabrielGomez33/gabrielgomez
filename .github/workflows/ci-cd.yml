@@ -179,9 +179,13 @@ jobs:
 
       - name: Create pre-deploy snapshot
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+          ssh -T -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'DEPLOY_SNAPSHOT'
-          cd ${{ secrets.GABRIELGOMEZ_DEPLOY_PATH }}
+          set -e
+          DEPLOY_PATH="${{ secrets.GABRIELGOMEZ_DEPLOY_PATH }}"
+          case "$DEPLOY_PATH" in ''|-*) echo "GABRIELGOMEZ_DEPLOY_PATH is empty or malformed (value shown in brackets): [$DEPLOY_PATH] — it must be an absolute path like /var/www/GabrielGomez"; exit 1;; esac
+          [ -d "$DEPLOY_PATH" ] || { echo "Deploy path not found on host: $DEPLOY_PATH"; exit 1; }
+          cd "$DEPLOY_PATH"
           CURRENT_COMMIT=$(git rev-parse HEAD)
           echo "Pre-deploy commit: $CURRENT_COMMIT"
           echo "$CURRENT_COMMIT" > /tmp/.gabrielgomez-rollback-commit
@@ -189,7 +193,7 @@ jobs:
 
       - name: Deploy
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+          ssh -T -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'DEPLOY_SCRIPT'
           set -e
           echo "=========================================="
@@ -197,7 +201,10 @@ jobs:
           echo "  $(date '+%Y-%m-%d %H:%M:%S')"
           echo "=========================================="
 
-          cd ${{ secrets.GABRIELGOMEZ_DEPLOY_PATH }}
+          DEPLOY_PATH="${{ secrets.GABRIELGOMEZ_DEPLOY_PATH }}"
+          case "$DEPLOY_PATH" in ''|-*) echo "GABRIELGOMEZ_DEPLOY_PATH is empty or malformed (value shown in brackets): [$DEPLOY_PATH] — it must be an absolute path like /var/www/GabrielGomez"; exit 1;; esac
+          [ -d "$DEPLOY_PATH" ] || { echo "Deploy path not found on host: $DEPLOY_PATH"; exit 1; }
+          cd "$DEPLOY_PATH"
 
           echo "[1/6] Pulling latest code..."
           git fetch origin master
@@ -284,10 +291,12 @@ jobs:
         if: failure() && steps.health_check.outputs.health_status == 'unhealthy'
         run: |
           echo "::error::DEPLOYING ROLLBACK..."
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+          ssh -T -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'ROLLBACK_SCRIPT'
           set -e
-          cd ${{ secrets.GABRIELGOMEZ_DEPLOY_PATH }}
+          DEPLOY_PATH="${{ secrets.GABRIELGOMEZ_DEPLOY_PATH }}"
+          [ -d "$DEPLOY_PATH" ] || { echo "Deploy path not found on host: $DEPLOY_PATH"; exit 1; }
+          cd "$DEPLOY_PATH"
           ROLLBACK_COMMIT=$(cat /tmp/.gabrielgomez-rollback-commit 2>/dev/null)
           if [ -z "$ROLLBACK_COMMIT" ]; then
             echo "ERROR: No rollback commit found!"
