@@ -55,19 +55,19 @@ Manual/first-time setup on the host:
 | `SERVER_HOST` | production host (shared with mirror-server / admin) |
 | `SERVER_USER` | SSH user (shared) |
 | `SERVER_SSH_KEY` | private deploy key (shared) |
-| `GABRIELGOMEZ_DEPLOY_PATH` | repo checkout on the host — `/var/www/GabrielGomez` (also the web root) |
+| `GABRIELGOMEZ_DEPLOY_PATH` | git checkout on the host — `/var/www/GabrielGomez` (Apache serves its `client/dist`) |
 
 ### 2. First-time host bootstrap
 
-# The checkout dir IS the web root (Admin pattern); the client publishes its
-# built dist/* into the same dir, and Apache serves only the built SPA.
+# The checkout lives at /var/www/GabrielGomez; Apache serves its client/dist
+# subfolder (Mirror convention), so source/VCS never sit in the served path.
 ```bash
 git clone <repo> /var/www/GabrielGomez            # == GABRIELGOMEZ_DEPLOY_PATH
 cd /var/www/GabrielGomez/server
 npm ci && npm run build && npm prune --omit=dev
 cp .env.example .env                               # fill in as needed
 sudo pm2 start ecosystem.config.js && sudo pm2 save
-cd ../client && npm ci && npm run deploy           # publishes dist/* into /var/www/GabrielGomez
+cd ../client && npm ci && npm run deploy           # builds client/dist in place (Apache serves it)
 ```
 
 ### 3. Apache — add to the `*:443` VirtualHost
@@ -76,31 +76,24 @@ Place the API `ProxyPass` **before** the static `Alias` (same ordering as
 `/admin/api`):
 
 ```apache
-    # Gabriel Gomez API (before the static alias)
+    # Gabriel Gomez API (BEFORE the static alias, like /admin/api)
     ProxyPass        /GabrielGomez/api http://127.0.0.1:8448/GabrielGomez/api
     ProxyPassReverse /GabrielGomez/api http://127.0.0.1:8448/GabrielGomez/api
 
-    # Gabriel Gomez SPA (static)
-    Alias "/GabrielGomez" "/var/www/GabrielGomez"
-    <Directory "/var/www/GabrielGomez">
+    # Gabriel Gomez portfolio + SonSoul — serve the Vite dist directly, same
+    # convention as /Mirror. The SPA history fallback (clean, extensionless
+    # URLs) is handled by the .htaccess shipped inside dist (AllowOverride All).
+    RedirectMatch 301 ^/GabrielGomez$ /GabrielGomez/
+    Alias "/GabrielGomez" "/var/www/GabrielGomez/client/dist"
+    <Directory "/var/www/GabrielGomez/client/dist">
         Options -Indexes +FollowSymLinks
         AllowOverride All
         Require all granted
-
-        # SPA fallback (also shipped as dist/.htaccess)
-        RewriteEngine On
-        RewriteBase /GabrielGomez/
-        RewriteCond %{REQUEST_FILENAME} !-f
-        RewriteCond %{REQUEST_FILENAME} !-d
-        RewriteRule ^ /GabrielGomez/index.html [L]
     </Directory>
-
-    # The checkout lives under the web root, so deny the source/VCS/tooling
-    # subtrees — only the built SPA (index.html + assets/) should be reachable.
-    <DirectoryMatch "^/var/www/GabrielGomez/(\.git|\.github|server|client|node_modules|docs)">
-        Require all denied
-    </DirectoryMatch>
 ```
+
+> Serving `client/dist` (not the repo root) keeps `.git`/`server`/source out of
+> the web path entirely — no deny rules needed.
 
 Then `sudo apache2ctl configtest && sudo systemctl reload apache2`.
 
