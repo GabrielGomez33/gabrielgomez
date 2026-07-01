@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "clean": "rm -rf dist",
     "rebuild": "npm run clean && npm run build",
-    "deploy": "npm run rebuild && rm -rf /var/www/GabrielGomez/assets /var/www/GabrielGomez/index.html && mkdir -p /var/www/GabrielGomez && cp -r dist/* /var/www/GabrielGomez/",
+    "deploy": "npm run rebuild",
     "lint": "eslint .",
     "preview": "vite preview"
   },

@@ -57,14 +57,14 @@ Secrets (tab: *Secrets*):
 | `SERVER_HOST` | `24.39.41.126` |
 | `SERVER_USER` | `administrator` |
 | `SERVER_SSH_KEY` | private deploy key (Option B above) |
-| `GABRIELGOMEZ_DEPLOY_PATH` | `/var/www/GabrielGomez` (checkout dir == web root) |
+| `GABRIELGOMEZ_DEPLOY_PATH` | `/var/www/GabrielGomez` (git checkout; Apache serves its `client/dist`) |
 
 ---
 
 ## 3. First-time host bootstrap
 
-# The checkout dir IS the web root (Admin pattern). Apache denies the source/
-# VCS subtrees (see the root README's vhost block), so only the built SPA shows.
+# Apache serves /var/www/GabrielGomez/client/dist (Mirror convention), so the
+# git checkout's source/VCS never sit in the served path.
 ```bash
 git clone https://github.com/GabrielGomez33/gabrielgomez /var/www/GabrielGomez
 cd /var/www/GabrielGomez/server
@@ -73,7 +73,7 @@ cp .env.example .env            # adjust if needed (defaults are fine for Phase 
 sudo pm2 start ecosystem.config.js && sudo pm2 save
 
 cd ../client
-npm ci && npm run deploy        # publishes dist/* into /var/www/GabrielGomez
+npm ci && npm run deploy        # builds client/dist in place (Apache serves it)
 ```
 
 Then add the Apache vhost block (see the root `README.md`) and reload Apache.
