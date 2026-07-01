@@ -1,0 +1,37 @@
+/* =============================================================================
+   Design tokens — high-contrast black & white, ethereal restraint.
+   Inspired by the Behance "Black & White Portfolio" reference: full-bleed
+   monochrome, spaced display type, heavy negative space.
+   ============================================================================= */
+:root {
+  /* Monochrome ramp */
+  --black: #0a0a0a;
+  --near-black: #101010;
+  --ink: #141414;
+  --smoke: #2a2a2a;
+  --ash: #6f6f6f;
+  --fog: #9a9a9a;
+  --mist: #cfcfcf;
+  --white: #f4f4f4;
+
+  --bg: var(--black);
+  --fg: var(--white);
+  --muted: var(--fog);
+  --line: rgba(244, 244, 244, 0.14);
+  --line-strong: rgba(244, 244, 244, 0.28);
+
+  /* Typography */
+  --font-display: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-serif: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'SFMono-Regular', 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+
+  /* Rhythm */
+  --section-pad: clamp(4rem, 12vh, 10rem);
+  --gutter: clamp(1.25rem, 5vw, 6rem);
+  --maxw: 1400px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --reveal-dur: 1100ms;
+}

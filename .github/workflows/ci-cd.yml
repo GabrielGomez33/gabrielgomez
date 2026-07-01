@@ -1,0 +1,303 @@
+# =============================================================================
+# GABRIEL GOMEZ — PORTFOLIO + SONSOUL CI/CD PIPELINE
+# =============================================================================
+# Adapted from the proven TUGRR Admin Portal pipeline (same host, same user).
+#   - server/ : TypeScript API (Express) -> PM2 process `gabrielgomez-server` :8448
+#   - client/ : React + Vite SPA -> static build published to /var/www/GabrielGomez
+#
+# TRIGGERS:
+#   - Push to master or develop -> full pipeline (+ deploy on master)
+#   - Pull request to master or develop -> quality gates only (no deploy)
+#   - Manual dispatch -> full pipeline with optional deploy
+#
+# REQUIRED GITHUB SECRETS (SERVER_* are shared with mirror-server / admin):
+#   SERVER_HOST               production host
+#   SERVER_USER               SSH user
+#   SERVER_SSH_KEY            private deploy key
+#   GABRIELGOMEZ_DEPLOY_PATH  repo checkout on the host (e.g. /root/apps/gabrielgomez)
+#
+# The client's `npm run deploy` publishes dist/* into /var/www/GabrielGomez,
+# which Apache serves via `Alias /GabrielGomez`.
+# =============================================================================
+
+name: Portfolio CI/CD
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+    branches: [master, develop]
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: 'Force deploy to production'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  # ===========================================================================
+  # JOB 1: QUALITY GATES
+  # ===========================================================================
+  quality:
+    name: Quality Gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: |
+            server/package-lock.json
+            client/package-lock.json
+
+      # ---- Server ----------------------------------------------------------
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Server type-check (strict)
+        working-directory: server
+        run: npm run type-check
+
+      - name: Build server
+        working-directory: server
+        run: npm run build
+
+      - name: Verify server build artifacts
+        working-directory: server
+        run: |
+          if [ ! -f "dist/index.js" ]; then
+            echo "::error::Server build failed — server/dist/index.js not found"
+            exit 1
+          fi
+          echo "Server build artifacts verified:"
+          ls -la dist/
+
+      - name: Server security audit
+        working-directory: server
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      # ---- Client ----------------------------------------------------------
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Lint client
+        working-directory: client
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Build client
+        working-directory: client
+        run: npm run build
+
+      - name: Verify client build artifacts
+        working-directory: client
+        run: |
+          if [ ! -f "dist/index.html" ]; then
+            echo "::error::Client build failed — client/dist/index.html not found"
+            exit 1
+          fi
+          echo "Client build artifacts verified:"
+          ls -la dist/
+
+      - name: Client security audit
+        working-directory: client
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      # ---- Repo-wide -------------------------------------------------------
+      - name: Scan for secrets in code
+        run: |
+          echo "Scanning for potential secrets..."
+          PATTERNS='(password|secret|api_key|private_key|token)\s*[:=]\s*["\x27][^"\x27]{8,}'
+          if grep -rniE "$PATTERNS" --include="*.ts" --include="*.tsx" --include="*.js" --include="*.json" \
+            --exclude-dir=node_modules --exclude-dir=dist \
+            --exclude="package-lock.json" --exclude="*.d.ts" . ; then
+            echo "::warning::Potential hardcoded secrets detected. Review the matches above."
+          else
+            echo "No hardcoded secrets detected."
+          fi
+
+  # ===========================================================================
+  # JOB 2: DEPLOY TO PRODUCTION
+  # ===========================================================================
+  deploy:
+    name: Deploy to Production
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/master') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy == 'true')
+
+    environment:
+      name: production
+      url: https://www.theundergroundrailroad.world/GabrielGomez
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Create pre-deploy snapshot
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'DEPLOY_SNAPSHOT'
+          cd ${{ secrets.GABRIELGOMEZ_DEPLOY_PATH }}
+          CURRENT_COMMIT=$(git rev-parse HEAD)
+          echo "Pre-deploy commit: $CURRENT_COMMIT"
+          echo "$CURRENT_COMMIT" > /tmp/.gabrielgomez-rollback-commit
+          DEPLOY_SNAPSHOT
+
+      - name: Deploy
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'DEPLOY_SCRIPT'
+          set -e
+          echo "=========================================="
+          echo "  GABRIEL GOMEZ DEPLOYMENT"
+          echo "  $(date '+%Y-%m-%d %H:%M:%S')"
+          echo "=========================================="
+
+          cd ${{ secrets.GABRIELGOMEZ_DEPLOY_PATH }}
+
+          echo "[1/6] Pulling latest code..."
+          git fetch origin master
+          git reset --hard origin/master
+
+          echo "[2/6] Building server..."
+          cd server
+          npm ci
+          npm run build
+          if [ ! -f "dist/index.js" ]; then
+            echo "ERROR: Server build failed — dist/index.js missing!"
+            exit 1
+          fi
+
+          echo "[3/6] Pruning server dev dependencies..."
+          npm prune --omit=dev
+
+          echo "[4/6] Restarting gabrielgomez-server (PM2)..."
+          sudo pm2 restart ecosystem.config.js --update-env || sudo pm2 start ecosystem.config.js
+
+          echo "[5/6] Building & publishing client..."
+          cd ../client
+          npm ci
+          npm run deploy
+
+          echo "[6/6] Deploy complete. Waiting for stabilization..."
+          cd ..
+          sleep 8
+          sudo pm2 list
+          DEPLOY_SCRIPT
+
+      - name: Verify gabrielgomez-server is online
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'PM2_CHECK'
+          set -e
+          OFFLINE=$(sudo pm2 jlist | python3 -c "
+          import json, sys
+          procs = json.load(sys.stdin)
+          expected = {'gabrielgomez-server'}
+          alive = {p['name'] for p in procs if p['pm2_env']['status'] == 'online'}
+          missing = expected - alive
+          dead = [(p['name'], p['pm2_env']['status']) for p in procs if p['name'] in expected and p['pm2_env']['status'] != 'online']
+          out = list(missing) + [f\"{n}({s})\" for n, s in dead]
+          if out:
+            print(' '.join(out))
+          ")
+          if [ -n "$OFFLINE" ]; then
+            echo "::error::gabrielgomez-server not online after restart: $OFFLINE"
+            sudo pm2 list
+            exit 1
+          fi
+          echo "gabrielgomez-server is online."
+          PM2_CHECK
+
+      - name: Health check
+        id: health_check
+        run: |
+          echo "Running health check..."
+          MAX_RETRIES=10
+          RETRY_INTERVAL=5
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Attempt $i/$MAX_RETRIES..."
+            HTTP_CODE=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+              ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
+              "curl -s -o /dev/null -w '%{http_code}' http://localhost:\${GABRIELGOMEZ_PORT:-8448}/GabrielGomez/api/health" \
+              2>/dev/null || echo "000")
+            echo "Health check response: HTTP $HTTP_CODE"
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "health_status=healthy" >> $GITHUB_OUTPUT
+              echo "Health check PASSED"
+              exit 0
+            fi
+            if [ "$i" -lt "$MAX_RETRIES" ]; then
+              echo "Retrying in ${RETRY_INTERVAL}s..."
+              sleep $RETRY_INTERVAL
+            fi
+          done
+          echo "health_status=unhealthy" >> $GITHUB_OUTPUT
+          echo "::error::Health check FAILED after $MAX_RETRIES attempts"
+          exit 1
+
+      - name: Rollback on failure
+        if: failure() && steps.health_check.outputs.health_status == 'unhealthy'
+        run: |
+          echo "::error::DEPLOYING ROLLBACK..."
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'ROLLBACK_SCRIPT'
+          set -e
+          cd ${{ secrets.GABRIELGOMEZ_DEPLOY_PATH }}
+          ROLLBACK_COMMIT=$(cat /tmp/.gabrielgomez-rollback-commit 2>/dev/null)
+          if [ -z "$ROLLBACK_COMMIT" ]; then
+            echo "ERROR: No rollback commit found!"
+            exit 1
+          fi
+          echo "Rolling back to commit: $ROLLBACK_COMMIT"
+          git checkout "$ROLLBACK_COMMIT"
+          cd server && npm ci && npm run build && npm prune --omit=dev
+          sudo pm2 restart ecosystem.config.js --update-env
+          cd ../client && npm ci && npm run deploy
+          cd ..
+          echo "Rollback complete."
+          sleep 8
+          sudo pm2 list
+          ROLLBACK_SCRIPT
+
+      - name: Tag release
+        if: success()
+        run: |
+          VERSION="v$(date +'%Y.%m.%d')-${GITHUB_SHA::7}"
+          git tag "$VERSION"
+          git push origin "$VERSION"
+          echo "Tagged release: $VERSION"
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

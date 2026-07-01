@@ -1,0 +1,19 @@
+# =============================================================================
+# SPA history fallback for the app served at /GabrielGomez/
+# Mirrors the proven mirror-client/.htaccess pattern. Apache's Alias points
+# /GabrielGomez at this build's dist/ output; this file ships inside dist so it
+# lands in the web root on deploy.
+# =============================================================================
+RewriteEngine On
+RewriteBase /GabrielGomez/
+
+# Let real files and directories through untouched.
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Real hashed assets always exist under /GabrielGomez/assets/*.
+RewriteRule ^assets/ - [L]
+
+# Everything else is a client-side route -> hand back index.html.
+RewriteRule . index.html [L]
