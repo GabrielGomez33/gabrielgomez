@@ -142,9 +142,15 @@ jobs:
     needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Gated on the DEPLOY_ENABLED repo variable so master pushes stay green until
+    # the host + secrets are configured. Set it (Settings → Secrets and variables
+    # → Actions → Variables) to 'true' once the secrets below exist and the host
+    # is bootstrapped. Until then this job is skipped, not failed.
     if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/master') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy == 'true')
+      vars.DEPLOY_ENABLED == 'true' && (
+        (github.event_name == 'push' && github.ref == 'refs/heads/master') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy == 'true')
+      )
 
     environment:
       name: production
@@ -156,12 +162,26 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Preflight — verify required secrets
+        run: |
+          missing=()
+          [ -z "${{ secrets.SERVER_HOST }}" ] && missing+=("SERVER_HOST")
+          [ -z "${{ secrets.SERVER_USER }}" ] && missing+=("SERVER_USER")
+          [ -z "${{ secrets.SERVER_SSH_KEY }}" ] && missing+=("SERVER_SSH_KEY")
+          [ -z "${{ secrets.GABRIELGOMEZ_DEPLOY_PATH }}" ] && missing+=("GABRIELGOMEZ_DEPLOY_PATH")
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "::error::Missing required secret(s): ${missing[*]}"
+            echo "Add them under Settings → Secrets and variables → Actions, then set the DEPLOY_ENABLED variable to 'true'."
+            exit 1
+          fi
+          echo "All required secrets present."
+
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
 
       - name: Create pre-deploy snapshot
         run: |
