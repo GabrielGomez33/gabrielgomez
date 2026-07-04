@@ -10,6 +10,9 @@ import adminUploadsRouter from './routes/admin/uploads';
 import adminOptionsRouter from './routes/admin/options';
 import storeCatalogRouter from './routes/store/catalog';
 import storeStreamRouter from './routes/store/stream';
+import storeCheckoutRouter from './routes/store/checkout';
+import storeDownloadRouter from './routes/store/download';
+import storeWebhookRouter from './routes/store/webhook';
 
 // =============================================================================
 // Gabriel Gomez API
@@ -75,6 +78,9 @@ router.use('/admin/options', adminOptionsRouter);
 // -- SonSoul: public storefront catalog + secure preview streaming -----------
 router.use('/store', storeCatalogRouter);
 router.use('/store', storeStreamRouter);
+router.use('/store/checkout', storeCheckoutRouter);
+router.use('/store', storeDownloadRouter); // GET /store/download/:token
+router.use('/store/webhook', storeWebhookRouter); // POST /store/webhook/paypal
 
 // -- Instagram feed (later) --------------------------------------------------
 router.get('/instagram/feed', (_req: Request, res: Response) => {
