@@ -14,6 +14,8 @@ import storeCheckoutRouter from './routes/store/checkout';
 import storeDownloadRouter from './routes/store/download';
 import storeWebhookRouter from './routes/store/webhook';
 import storeAccountRouter from './routes/store/account';
+import { runSelfCheck, logSelfCheck } from './selfcheck';
+import { requireAdmin } from './auth/middleware';
 
 // =============================================================================
 // Gabriel Gomez API
@@ -71,6 +73,9 @@ router.get('/health', (_req: Request, res: Response) => {
 router.use('/contact', contactRouter);
 
 // -- SonSoul: admin (creator pipeline, JWT-gated) ----------------------------
+router.get('/admin/system', requireAdmin, async (_req: Request, res: Response) => {
+  res.json({ success: true, report: await runSelfCheck() });
+});
 router.use('/admin/auth', adminAuthRouter);
 router.use('/admin/products', adminProductsRouter);
 router.use('/admin/products', adminUploadsRouter); // upload endpoints (:id/audio, :id/cover)
@@ -106,11 +111,7 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
 
 const server = app.listen(PORT, '127.0.0.1', () => {
   console.log(`[gabrielgomez-server] listening on 127.0.0.1:${PORT} (base ${BASE})`);
-  console.log(
-    `[gabrielgomez-server] email ${
-      process.env.RESEND_API_KEY ? 'configured (Resend)' : 'NOT configured (RESEND_API_KEY missing)'
-    }`,
-  );
+  void logSelfCheck();
 });
 
 // Graceful shutdown for PM2 (shutdown_with_message + SIGINT).
