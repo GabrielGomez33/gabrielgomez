@@ -275,6 +275,19 @@ export async function getTrackById(id: number): Promise<TrackRow | null> {
   return rows[0] ?? null;
 }
 
+/** Attach generated media (master/preview paths + waveform peaks) to a track. */
+export async function setTrackMedia(
+  trackId: number,
+  m: { masterPath?: string | null; previewPath?: string | null; waveform?: number[] | null },
+): Promise<void> {
+  await execute('UPDATE music_tracks SET master_path = ?, preview_path = ?, waveform_json = ? WHERE id = ?', [
+    m.masterPath ?? null,
+    m.previewPath ?? null,
+    m.waveform ? JSON.stringify(m.waveform) : null,
+    trackId,
+  ]);
+}
+
 export interface VariantInput {
   sku?: string | null;
   size?: string | null;

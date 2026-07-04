@@ -1,13 +1,19 @@
 import express, { type Request, type Response } from 'express';
+import fs from 'fs';
 import { type RowDataPacket } from 'mysql2/promise';
 import { query } from '../../db/pool';
 import * as products from '../../services/products';
 import { signPreviewToken } from '../../services/previewToken';
+import { resolveInStorage } from '../../services/media';
 
 // Public storefront catalog (published products only). No auth.
 const router = express.Router();
 
 const API_BASE = '/GabrielGomez/api';
+
+function coverUrl(row: { id: number; cover_image_path: string | null }): string | null {
+  return row.cover_image_path ? `${API_BASE}/store/cover/${row.id}` : null;
+}
 
 // Strip internal file paths from a track and attach a signed preview URL so the
 // browser can only reach the 10s preview through the gated stream endpoint.
@@ -23,7 +29,7 @@ function publicizeTrack(track: RowDataPacket): Record<string, unknown> {
 
 async function publicizeProduct(row: products.ProductRow): Promise<Record<string, unknown>> {
   const full = await products.getFullProduct(row);
-  return { ...full, tracks: (full.tracks as RowDataPacket[]).map(publicizeTrack) };
+  return { ...full, coverUrl: coverUrl(row), tracks: (full.tracks as RowDataPacket[]).map(publicizeTrack) };
 }
 
 // Dropdown options for storefront filters.
@@ -44,7 +50,29 @@ router.get('/options', async (req: Request, res: Response): Promise<void> => {
 router.get('/products', async (req: Request, res: Response): Promise<void> => {
   const category = req.query.category as products.Category | undefined;
   const rows = await products.listProducts({ category, status: 'published' });
-  res.json({ success: true, products: rows });
+  res.json({ success: true, products: rows.map((r) => ({ ...r, coverUrl: coverUrl(r) })) });
+});
+
+// Public cover image (published products only).
+router.get('/cover/:productId', async (req: Request, res: Response): Promise<void> => {
+  const p = await products.getProductById(Number(req.params.productId));
+  if (!p || p.status !== 'published' || !p.cover_image_path) {
+    res.status(404).end();
+    return;
+  }
+  let abs: string;
+  try {
+    abs = resolveInStorage(p.cover_image_path);
+  } catch {
+    res.status(404).end();
+    return;
+  }
+  if (!fs.existsSync(abs)) {
+    res.status(404).end();
+    return;
+  }
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.sendFile(abs);
 });
 
 // Published product detail by slug (with tracks/variants/tiers/images).
