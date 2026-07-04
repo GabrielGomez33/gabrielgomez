@@ -13,6 +13,7 @@ import storeStreamRouter from './routes/store/stream';
 import storeCheckoutRouter from './routes/store/checkout';
 import storeDownloadRouter from './routes/store/download';
 import storeWebhookRouter from './routes/store/webhook';
+import storeAccountRouter from './routes/store/account';
 
 // =============================================================================
 // Gabriel Gomez API
@@ -81,6 +82,7 @@ router.use('/store', storeStreamRouter);
 router.use('/store/checkout', storeCheckoutRouter);
 router.use('/store', storeDownloadRouter); // GET /store/download/:token
 router.use('/store/webhook', storeWebhookRouter); // POST /store/webhook/paypal
+router.use('/store/account', storeAccountRouter); // customer accounts (optional)
 
 // -- Instagram feed (later) --------------------------------------------------
 router.get('/instagram/feed', (_req: Request, res: Response) => {

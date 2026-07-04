@@ -44,20 +44,34 @@ doesn't exist yet, and when it does it will be the gatekeeper." See **Pending**.
 - DB unavailable → clean `500`, no hang.
 - Preview without a valid token → `403`; bad track id → `400`.
 
-## Pending — the security-critical backend still to build
+## Checkout, delivery & accounts — now built (secure by design)
 
-1. **Checkout** — PayPal Orders create/**capture**; recompute prices **server-side**
-   (never trust client amounts); create `orders`/`order_items` on capture only.
-2. **PayPal webhook endpoint** — verify signature (`verifyWebhookSignature`) +
-   idempotency via `paypal_webhooks.event_id`; reconcile paid/refunded state.
-3. **Secure delivery** — issue `download_grants` (single/limited use, expiring)
-   **only** for a captured order; a `GET /store/download/:token` that checks
-   paid + expiry + count, streams a **zip built on the fly** from the masters,
-   never revealing a path; decrement on use.
-4. **Inventory guard** — decrement stock atomically at capture to prevent oversell.
+- **Server-side pricing** — `computeCart` recomputes every price, shipping and
+  stock check from the DB; the client's numbers are never trusted.
+- **Capture verification** — `/store/checkout/capture` re-checks the PayPal
+  captured amount **equals our recorded total** before fulfilling; idempotent.
+- **Atomic inventory** — stock is decremented with a guarded UPDATE at capture
+  (`... WHERE stock_qty >= ?`) to prevent oversell/races.
+- **Download grants** — issued **only** after capture; single token, expiring
+  (`DOWNLOAD_TTL_DAYS`), count-limited (`DOWNLOAD_MAX`). `GET /store/download/:token`
+  validates expiry + count, **atomically claims a slot**, then streams an
+  on-the-fly **zip** of the masters — no path exposed, nothing stored to leak.
+- **PayPal webhook** — signature-verified + idempotent (`paypal_webhooks.event_id`),
+  reconciles capture/refund even if the browser never calls capture.
+- **Customer accounts** (optional; guest checkout still works) — mirror-server's
+  proven flow: bcrypt cost 12, timing-constant login, **HS256-pinned JWT carrying
+  `pcat`** so a password reset invalidates all existing tokens, SHA-256-hashed
+  verify/reset links (single-use, expiring), anti-enumeration forgot-password,
+  per-IP rate limits. Guest orders auto-link to an account by email on
+  register/login.
 
-Until #1–#3 exist, there is simply no download path — which is safe, but the
-store isn't functionally complete.
+Verified: bad-email/weak-password 400, unauthed 401, forgot-password generic
+200, capture rejects amount mismatch, download token gates (400/404/410/429).
+
+## Still recommended before going live
+- Flip PayPal sandbox → live only after a real end-to-end capture test.
+- Edge WAF / fail2ban; audit logging + alerting; a third-party pen-test.
+- Consider hashing preview tokens' equivalents and a periodic grant/token purge job.
 
 ## Would round out "enterprise" (infra/process, mostly outside app code)
 - Edge WAF / fail2ban on Apache for the whole domain.

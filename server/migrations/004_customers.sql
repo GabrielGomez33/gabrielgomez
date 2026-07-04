@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS customers (
   email_verified   TINYINT(1) NOT NULL DEFAULT 0,
   is_active        TINYINT(1) NOT NULL DEFAULT 1,
   marketing_opt_in TINYINT(1) NOT NULL DEFAULT 0,
+  password_changed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   last_login_at    TIMESTAMP NULL,
   created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_cust_email (email)
