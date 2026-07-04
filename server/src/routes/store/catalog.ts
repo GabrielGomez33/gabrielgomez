@@ -32,6 +32,20 @@ async function publicizeProduct(row: products.ProductRow): Promise<Record<string
   return { ...full, coverUrl: coverUrl(row), tracks: (full.tracks as RowDataPacket[]).map(publicizeTrack) };
 }
 
+// Public storefront config (publishable values only — no secrets).
+router.get('/config', (_req: Request, res: Response): void => {
+  res.json({
+    success: true,
+    paypalClientId: process.env.PAYPAL_CLIENT_ID || '',
+    paypalEnv: (process.env.PAYPAL_ENV || 'sandbox').toLowerCase(),
+    currency: 'USD',
+    shipping: {
+      flatCents: Number(process.env.SHIPPING_FLAT_CENTS || 700),
+      perItemCents: Number(process.env.SHIPPING_PER_ITEM_CENTS || 200),
+    },
+  });
+});
+
 // Dropdown options for storefront filters.
 router.get('/options', async (req: Request, res: Response): Promise<void> => {
   const kind = req.query.kind as string | undefined;

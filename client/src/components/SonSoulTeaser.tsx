@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { sonsoul } from '../data/content'
 import { Reveal } from './Reveal'
 
@@ -15,7 +16,7 @@ export function SonSoulTeaser() {
           <p className="sonsoul__tagline">{sonsoul.tagline}</p>
         </Reveal>
         <Reveal delay={240}>
-          <span className="sonsoul__status">{sonsoul.status}</span>
+          <Link to="/store/music" className="sonsoul__enter">Enter the store &rarr;</Link>
         </Reveal>
       </div>
     </section>
