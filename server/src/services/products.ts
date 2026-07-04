@@ -263,6 +263,18 @@ export async function getMusicMeta(productId: number): Promise<RowDataPacket | n
   return rows[0] ?? null;
 }
 
+export interface TrackRow extends RowDataPacket {
+  id: number;
+  product_id: number;
+  preview_path: string | null;
+  master_path: string | null;
+  length_sec: number | null;
+}
+export async function getTrackById(id: number): Promise<TrackRow | null> {
+  const rows = await query<TrackRow[]>('SELECT * FROM music_tracks WHERE id = ?', [id]);
+  return rows[0] ?? null;
+}
+
 export interface VariantInput {
   sku?: string | null;
   size?: string | null;

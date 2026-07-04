@@ -8,6 +8,7 @@ import adminAuthRouter from './routes/admin/auth';
 import adminProductsRouter from './routes/admin/products';
 import adminOptionsRouter from './routes/admin/options';
 import storeCatalogRouter from './routes/store/catalog';
+import storeStreamRouter from './routes/store/stream';
 
 // =============================================================================
 // Gabriel Gomez API
@@ -55,8 +56,9 @@ router.use('/admin/auth', adminAuthRouter);
 router.use('/admin/products', adminProductsRouter);
 router.use('/admin/options', adminOptionsRouter);
 
-// -- SonSoul: public storefront catalog --------------------------------------
+// -- SonSoul: public storefront catalog + secure preview streaming -----------
 router.use('/store', storeCatalogRouter);
+router.use('/store', storeStreamRouter);
 
 // -- Instagram feed (later) --------------------------------------------------
 router.get('/instagram/feed', (_req: Request, res: Response) => {
