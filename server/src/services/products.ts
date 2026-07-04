@@ -180,22 +180,87 @@ export async function getImages(productId: number): Promise<RowDataPacket[]> {
   return query<RowDataPacket[]>('SELECT * FROM product_images WHERE product_id = ? ORDER BY position, id', [productId]);
 }
 
+export type MusicStyle = 'vocal' | 'instruments' | 'mixed';
+
 export interface TrackInput {
   name: string;
   artist?: string | null;
   genre?: string | null;
+  style?: MusicStyle | null;
   lengthSec?: number | null;
   bpm?: number | null;
   musicKey?: string | null;
   position?: number;
+  // Auto-extracted on upload (ffprobe) — optional here.
+  fileSizeBytes?: number | null;
+  format?: string | null;
+  bitrateKbps?: number | null;
+  sampleRate?: number | null;
+  channels?: number | null;
+  originalFilename?: string | null;
 }
 export async function addTrack(productId: number, t: TrackInput): Promise<number> {
   const result = await execute(
-    `INSERT INTO music_tracks (product_id, position, name, artist, genre, length_sec, bpm, music_key)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [productId, t.position ?? 0, t.name, t.artist ?? null, t.genre ?? null, t.lengthSec ?? null, t.bpm ?? null, t.musicKey ?? null],
+    `INSERT INTO music_tracks
+       (product_id, position, name, artist, genre, style, length_sec, bpm, music_key,
+        file_size_bytes, format, bitrate_kbps, sample_rate, channels, original_filename)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      productId,
+      t.position ?? 0,
+      t.name,
+      t.artist ?? null,
+      t.genre ?? null,
+      t.style ?? null,
+      t.lengthSec ?? null,
+      t.bpm ?? null,
+      t.musicKey ?? null,
+      t.fileSizeBytes ?? null,
+      t.format ?? null,
+      t.bitrateKbps ?? null,
+      t.sampleRate ?? null,
+      t.channels ?? null,
+      t.originalFilename ?? null,
+    ],
   );
+  await recomputeMusicAggregates(productId);
   return result.insertId;
+}
+
+// --- Product-level music metadata ------------------------------------------
+export interface MusicMetaInput {
+  genre?: string | null;
+  style?: MusicStyle | null;
+  notes?: string | null;
+}
+export async function setMusicMeta(productId: number, meta: MusicMetaInput): Promise<void> {
+  await execute(
+    `INSERT INTO music_meta (product_id, genre, style, notes) VALUES (?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       genre = COALESCE(VALUES(genre), genre),
+       style = COALESCE(VALUES(style), style),
+       notes = COALESCE(VALUES(notes), notes)`,
+    [productId, meta.genre ?? null, meta.style ?? null, meta.notes ?? null],
+  );
+}
+
+/** Recompute contents aggregates (count / total length / total size) from tracks. */
+export async function recomputeMusicAggregates(productId: number): Promise<void> {
+  await execute(
+    `INSERT INTO music_meta (product_id, track_count, total_length_sec, total_size_bytes)
+       SELECT ?, COUNT(*), COALESCE(SUM(length_sec),0), COALESCE(SUM(file_size_bytes),0)
+       FROM music_tracks WHERE product_id = ?
+     ON DUPLICATE KEY UPDATE
+       track_count = VALUES(track_count),
+       total_length_sec = VALUES(total_length_sec),
+       total_size_bytes = VALUES(total_size_bytes)`,
+    [productId, productId],
+  );
+}
+
+export async function getMusicMeta(productId: number): Promise<RowDataPacket | null> {
+  const rows = await query<RowDataPacket[]>('SELECT * FROM music_meta WHERE product_id = ?', [productId]);
+  return rows[0] ?? null;
 }
 
 export interface VariantInput {
@@ -237,11 +302,12 @@ export async function addLicenseTier(productId: number, tier: LicenseTier, price
 
 /** Full product with all related rows, for detail views. */
 export async function getFullProduct(row: ProductRow) {
-  const [tracks, variants, tiers, images] = await Promise.all([
+  const [tracks, variants, tiers, images, musicMeta] = await Promise.all([
     getTracks(row.id),
     getVariants(row.id),
     getLicenseTiers(row.id),
     getImages(row.id),
+    row.category === 'music' ? getMusicMeta(row.id) : Promise.resolve(null),
   ]);
-  return { ...row, tracks, variants, licenseTiers: tiers, images };
+  return { ...row, tracks, variants, licenseTiers: tiers, images, musicMeta };
 }

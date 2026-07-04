@@ -33,8 +33,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     currency: b.currency,
     weightGrams: b.weightGrams ?? null,
   });
+  // Music products get their universal genre/style/notes recorded up front.
+  if (b.category === 'music' && (b.genre || b.style || b.notes)) {
+    await products.setMusicMeta(id, { genre: b.genre ?? null, style: b.style ?? null, notes: b.notes ?? null });
+  }
   const row = await products.getProductById(id);
-  res.status(201).json({ success: true, product: row });
+  res.status(201).json({ success: true, product: row ? await products.getFullProduct(row) : null });
 });
 
 // List (all statuses).
@@ -83,10 +87,18 @@ router.post('/:id/tracks', async (req: Request, res: Response): Promise<void> =>
     name: String(req.body.name).trim(),
     artist: req.body.artist ?? null,
     genre: req.body.genre ?? null,
+    style: req.body.style ?? null,
     lengthSec: req.body.lengthSec ?? null,
     bpm: req.body.bpm ?? null,
     musicKey: req.body.musicKey ?? null,
     position: req.body.position ?? 0,
+    // Technical fields are normally auto-filled by the upload pipeline (ffprobe).
+    fileSizeBytes: req.body.fileSizeBytes ?? null,
+    format: req.body.format ?? null,
+    bitrateKbps: req.body.bitrateKbps ?? null,
+    sampleRate: req.body.sampleRate ?? null,
+    channels: req.body.channels ?? null,
+    originalFilename: req.body.originalFilename ?? null,
   });
   res.status(201).json({ success: true, trackId });
 });
@@ -118,6 +130,27 @@ router.post('/:id/tiers', async (req: Request, res: Response): Promise<void> => 
   }
   await products.addLicenseTier(id, tier, Number(req.body?.priceCents) || 0);
   res.status(201).json({ success: true });
+});
+
+// Upsert product-level music metadata (genre / style / notes).
+router.post('/:id/music-meta', async (req: Request, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  const existing = await products.getProductById(id);
+  if (!existing) {
+    res.status(404).json({ success: false, error: 'Not found.' });
+    return;
+  }
+  const style = req.body?.style;
+  if (style && !['vocal', 'instruments', 'mixed'].includes(style)) {
+    res.status(400).json({ success: false, error: 'style must be vocal | instruments | mixed.' });
+    return;
+  }
+  await products.setMusicMeta(id, {
+    genre: req.body?.genre ?? null,
+    style: style ?? null,
+    notes: req.body?.notes ?? null,
+  });
+  res.json({ success: true, musicMeta: await products.getMusicMeta(id) });
 });
 
 // Publish: flips status and auto-creates the PayPal catalog product.

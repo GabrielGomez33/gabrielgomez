@@ -12,8 +12,13 @@ plumbing live inside `gabrielgomez-server` (:8448). Storefront views come next.
 - **products** — one row per item; `category` (music/clothing/accessory), `type`
   (beatpack/single/album/shirt/pants/socks/accessory), price, status, `is_digital`,
   shipping `weight_grams`, `paypal_product_id`
-- **music_tracks** — per-track name/artist/genre/length/bpm/key, `master_path`
-  (outside web root), `preview_path` (10s tagged), `waveform_json` (peaks)
+- **music_tracks** — per-track name/artist/genre/**style**/length/bpm/key, plus
+  auto-extracted technical info (`file_size_bytes`, `format`, `bitrate_kbps`,
+  `sample_rate`, `channels`, `original_filename`); `master_path` (outside web
+  root), `preview_path` (10s tagged), `waveform_json` (peaks)
+- **music_meta** — product-level universal music fields (genre, **style**:
+  vocal/instruments/mixed, notes) + "contents" aggregates (`track_count`,
+  `total_length_sec`, `total_size_bytes`), applied to single/album/beatpack alike
 - **music_license_tiers** — optional mp3/wav/stems/exclusive pricing
 - **product_variants** — clothing size/color/style + `stock_qty` + weight
 - **orders / order_items** — totals, shipping address, fulfillment + tracking, PayPal ids
@@ -69,6 +74,7 @@ Admin (Bearer JWT from `/admin/auth/login`):
 - `POST /admin/products` · `GET /admin/products` · `GET /admin/products/:id`
   · `PATCH /admin/products/:id` · `DELETE /admin/products/:id`
 - `POST /admin/products/:id/tracks|variants|tiers`
+- `POST /admin/products/:id/music-meta` → upsert genre/style/notes
 - `POST /admin/products/:id/publish` → flips status + auto-creates the PayPal catalog product
 - `GET /admin/options` · `POST /admin/options`
 
@@ -110,6 +116,15 @@ the white-bg/black-wave render):
 ```bash
 ffmpeg -v error -i master.wav -ac 1 -ar 8000 -f s16le -
 ```
+
+### Storage & delivery
+- Uploads (file-by-file or a whole folder) are numbered by `position` and their
+  masters saved under `STORAGE_ROOT` (an external SSD mount, outside the web root).
+- ffprobe auto-fills each track's size/format/bitrate/sample-rate/channels/length;
+  `music_meta` aggregates roll up count / total length / total size.
+- **Zip on demand**: a beatpack/album download is built as a fresh zip stream
+  (`archiver`) at download time from the masters — nothing zipped is stored, so
+  nothing can leak, and it always reflects the current files.
 
 ### Anti-piracy model
 - Preview = short + tagged + low bitrate, web-served.
