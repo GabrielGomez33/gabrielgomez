@@ -75,13 +75,19 @@ Admin (Bearer JWT from `/admin/auth/login`):
   · `PATCH /admin/products/:id` · `DELETE /admin/products/:id`
 - `POST /admin/products/:id/tracks|variants|tiers`
 - `POST /admin/products/:id/music-meta` → upsert genre/style/notes
+- `POST /admin/products/:id/audio` (multipart, field `files`, one or many) →
+  saves masters to the SSD, ffprobe technical info, 10s tagged preview + waveform
+  peaks per track, recomputes contents aggregates
+- `POST /admin/products/:id/cover` (multipart, field `image`) → cover image
 - `POST /admin/products/:id/publish` → flips status + auto-creates the PayPal catalog product
 - `GET /admin/options` · `POST /admin/options`
 
 Public storefront:
 - `GET /store/options[?kind=]`
-- `GET /store/products[?category=]` (published only)
-- `GET /store/products/:slug`
+- `GET /store/products[?category=]` (published only; each has `coverUrl`)
+- `GET /store/products/:slug` (tracks carry a signed `previewUrl`; internal paths stripped)
+- `GET /store/cover/:productId` (cover image)
+- `GET /store/preview/:trackId?t=<token>` (gated 10s preview stream)
 
 ## ffmpeg — A→Z (media pipeline)
 
