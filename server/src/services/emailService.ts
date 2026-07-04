@@ -4,11 +4,6 @@
 // in the repo.
 // =============================================================================
 
-const PROVIDER = (process.env.EMAIL_PROVIDER || 'resend').toLowerCase();
-const API_KEY = process.env.RESEND_API_KEY || process.env.EMAIL_API_KEY || '';
-const FROM_ADDRESS = process.env.EMAIL_FROM_ADDRESS || 'noreply@theundergroundrailroad.world';
-const FROM_NAME = process.env.EMAIL_FROM_NAME || 'Gabriel Gomez';
-
 export interface SendEmailArgs {
   to: string;
   subject: string;
@@ -25,22 +20,28 @@ export interface SendEmailResult {
 
 /** Send a single transactional email through Resend. */
 export async function sendEmail(args: SendEmailArgs): Promise<SendEmailResult> {
-  if (!API_KEY) {
+  // Read config at call time so it never depends on module import order.
+  const provider = (process.env.EMAIL_PROVIDER || 'resend').toLowerCase();
+  const apiKey = process.env.RESEND_API_KEY || process.env.EMAIL_API_KEY || '';
+  const fromAddress = process.env.EMAIL_FROM_ADDRESS || 'noreply@theundergroundrailroad.world';
+  const fromName = process.env.EMAIL_FROM_NAME || 'Gabriel Gomez';
+
+  if (!apiKey) {
     return { ok: false, error: 'email not configured (missing RESEND_API_KEY)' };
   }
-  if (PROVIDER !== 'resend') {
-    return { ok: false, error: `unsupported EMAIL_PROVIDER: ${PROVIDER}` };
+  if (provider !== 'resend') {
+    return { ok: false, error: `unsupported EMAIL_PROVIDER: ${provider}` };
   }
 
   try {
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: `${FROM_NAME} <${FROM_ADDRESS}>`,
+        from: `${fromName} <${fromAddress}>`,
         to: [args.to],
         subject: args.subject,
         html: args.html,

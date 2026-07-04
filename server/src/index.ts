@@ -1,8 +1,14 @@
-import 'dotenv/config';
-import express, { type Request, type Response } from 'express';
+import './env'; // must be first — loads .env from the server root before anything reads process.env
+import express, { type Request, type Response, type NextFunction } from 'express';
+import 'express-async-errors'; // patch Router so async handler throws reach the error middleware
 import cors from 'cors';
 import helmet from 'helmet';
 import contactRouter from './routes/contact';
+import adminAuthRouter from './routes/admin/auth';
+import adminProductsRouter from './routes/admin/products';
+import adminOptionsRouter from './routes/admin/options';
+import storeCatalogRouter from './routes/store/catalog';
+import storeStreamRouter from './routes/store/stream';
 
 // =============================================================================
 // Gabriel Gomez API
@@ -45,16 +51,18 @@ router.get('/health', (_req: Request, res: Response) => {
 // -- Contact / inquiry (Resend email) ----------------------------------------
 router.use('/contact', contactRouter);
 
-// -- Instagram feed (Phase 2 placeholder) ------------------------------------
-// Will proxy the Instagram Graph API server-side with a cached, token-backed
-// response so the portfolio can render a B&W feed grid. Returns 501 until wired.
-router.get('/instagram/feed', (_req: Request, res: Response) => {
-  res.status(501).json({ status: 'not_implemented', message: 'Instagram feed lands in Phase 2.' });
-});
+// -- SonSoul: admin (creator pipeline, JWT-gated) ----------------------------
+router.use('/admin/auth', adminAuthRouter);
+router.use('/admin/products', adminProductsRouter);
+router.use('/admin/options', adminOptionsRouter);
 
-// -- SonSoul catalog (Phase 2 placeholder) -----------------------------------
-router.get('/sonsoul/products', (_req: Request, res: Response) => {
-  res.status(501).json({ status: 'not_implemented', message: 'SonSoul catalog lands in Phase 2.' });
+// -- SonSoul: public storefront catalog + secure preview streaming -----------
+router.use('/store', storeCatalogRouter);
+router.use('/store', storeStreamRouter);
+
+// -- Instagram feed (later) --------------------------------------------------
+router.get('/instagram/feed', (_req: Request, res: Response) => {
+  res.status(501).json({ status: 'not_implemented', message: 'Instagram feed lands later.' });
 });
 
 app.use(BASE, router);
@@ -64,8 +72,21 @@ app.use((_req: Request, res: Response) => {
   res.status(404).json({ status: 'not_found' });
 });
 
+// -- Error handler (catches async throws via express-async-errors) ------------
+app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  console.error('[gabrielgomez-server] unhandled error:', err instanceof Error ? err.stack : err);
+  if (!res.headersSent) {
+    res.status(500).json({ success: false, error: 'Server error.' });
+  }
+});
+
 const server = app.listen(PORT, '127.0.0.1', () => {
   console.log(`[gabrielgomez-server] listening on 127.0.0.1:${PORT} (base ${BASE})`);
+  console.log(
+    `[gabrielgomez-server] email ${
+      process.env.RESEND_API_KEY ? 'configured (Resend)' : 'NOT configured (RESEND_API_KEY missing)'
+    }`,
+  );
 });
 
 // Graceful shutdown for PM2 (shutdown_with_message + SIGINT).

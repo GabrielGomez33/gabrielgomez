@@ -17,8 +17,9 @@ const MAX_EMAIL = 254;
 const MIN_MESSAGE = 5;
 const EMAIL_RX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const SUPPORT_INBOX = process.env.SUPPORT_INBOX_EMAIL || 'theanimaprojectllc@gmail.com';
-const APP_URL = process.env.APP_URL || 'https://www.theundergroundrailroad.world/GabrielGomez';
+// Read at call time (see emailService) so import order can't strand these.
+const supportInbox = () => process.env.SUPPORT_INBOX_EMAIL || 'theanimaprojectllc@gmail.com';
+const appUrl = () => process.env.APP_URL || 'https://www.theundergroundrailroad.world/GabrielGomez';
 
 // Sliding-window rate limit, keyed by truncated IP, held in memory (process
 // local — same approach as mirror-server's feedback limiter).
@@ -105,7 +106,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   const operatorText = `New portfolio inquiry\nFrom: ${name} <${email}>\nSubject: ${subject}\n\n${message}`;
 
   const op = await sendEmail({
-    to: SUPPORT_INBOX,
+    to: supportInbox(),
     subject: `[Portfolio] ${subject} — ${name}`,
     html: operatorHtml,
     text: operatorText,
@@ -127,14 +128,14 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#0a0a0a;color:#f4f4f4;padding:28px;border-radius:14px;max-width:560px;margin:auto">
       <h2 style="font-weight:300;margin:0 0 14px">Thanks, ${safe.name} &mdash; I got your message.</h2>
       <p style="color:#cfcfcf;line-height:1.6;margin:0 0 18px">I&rsquo;ll get back to you soon. You can reply directly to this email if you&rsquo;d like to add anything.</p>
-      <a href="${APP_URL}/" style="display:inline-block;background:#f4f4f4;color:#0a0a0a;text-decoration:none;padding:10px 18px;border-radius:999px;font-size:13px;letter-spacing:.08em">Back to the site</a>
+      <a href="${appUrl()}/" style="display:inline-block;background:#f4f4f4;color:#0a0a0a;text-decoration:none;padding:10px 18px;border-radius:999px;font-size:13px;letter-spacing:.08em">Back to the site</a>
     </div>`;
   void sendEmail({
     to: email,
     subject: 'Thanks — I got your message',
     html: ackHtml,
     text: `Hi ${name},\n\nThanks for reaching out — I got your message and will get back to you soon.\n\n— Gabriel`,
-    replyTo: SUPPORT_INBOX,
+    replyTo: supportInbox(),
   }).catch(() => {
     /* ack is best-effort */
   });
