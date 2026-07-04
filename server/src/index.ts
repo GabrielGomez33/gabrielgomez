@@ -10,6 +10,10 @@ import adminUploadsRouter from './routes/admin/uploads';
 import adminOptionsRouter from './routes/admin/options';
 import storeCatalogRouter from './routes/store/catalog';
 import storeStreamRouter from './routes/store/stream';
+import storeCheckoutRouter from './routes/store/checkout';
+import storeDownloadRouter from './routes/store/download';
+import storeWebhookRouter from './routes/store/webhook';
+import storeAccountRouter from './routes/store/account';
 
 // =============================================================================
 // Gabriel Gomez API
@@ -29,10 +33,24 @@ const BASE = '/GabrielGomez/api';
 
 app.disable('x-powered-by');
 // Behind Apache's reverse proxy — trust X-Forwarded-For so req.ip is the real
-// client address (used by the contact rate limiter).
+// client address (used by the rate limiters).
 app.set('trust proxy', true);
 app.use(helmet());
-app.use(cors());
+
+// Restrict CORS to our own site (and no-Origin requests like curl/health).
+const ALLOWED_ORIGINS = (
+  process.env.CORS_ALLOWED_ORIGINS || 'https://www.theundergroundrailroad.world'
+)
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+app.use(
+  cors({
+    origin: (origin, cb) => cb(null, !origin || ALLOWED_ORIGINS.includes(origin)),
+    credentials: false,
+  }),
+);
+
 app.use(express.json({ limit: '1mb' }));
 
 const router = express.Router();
@@ -61,6 +79,10 @@ router.use('/admin/options', adminOptionsRouter);
 // -- SonSoul: public storefront catalog + secure preview streaming -----------
 router.use('/store', storeCatalogRouter);
 router.use('/store', storeStreamRouter);
+router.use('/store/checkout', storeCheckoutRouter);
+router.use('/store', storeDownloadRouter); // GET /store/download/:token
+router.use('/store/webhook', storeWebhookRouter); // POST /store/webhook/paypal
+router.use('/store/account', storeAccountRouter); // customer accounts (optional)
 
 // -- Instagram feed (later) --------------------------------------------------
 router.get('/instagram/feed', (_req: Request, res: Response) => {

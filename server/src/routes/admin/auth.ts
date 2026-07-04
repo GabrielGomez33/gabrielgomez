@@ -18,7 +18,32 @@ interface AdminRow extends RowDataPacket {
 // A fixed dummy hash keeps login timing constant whether or not the user exists.
 const DUMMY_HASH = '$2a$10$CwTycUXWue0Thq9StjUM0uJ8Dj0PjV6cU9y1Q3wY3Ff3B6P2mYia';
 
+// Per-IP login rate limit (brute-force defense), in-memory sliding window.
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX = Number(process.env.LOGIN_RATE_LIMIT || 10);
+const loginHits = new Map<string, { count: number; start: number }>();
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, w] of loginHits) if (now - w.start > LOGIN_WINDOW_MS) loginHits.delete(k);
+}, LOGIN_WINDOW_MS).unref();
+
+function loginRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const w = loginHits.get(ip);
+  if (!w || now - w.start > LOGIN_WINDOW_MS) {
+    loginHits.set(ip, { count: 1, start: now });
+    return false;
+  }
+  if (w.count >= LOGIN_MAX) return true;
+  w.count += 1;
+  return false;
+}
+
 router.post('/login', async (req: Request, res: Response): Promise<void> => {
+  if (loginRateLimited(req.ip || 'unknown')) {
+    res.status(429).json({ success: false, error: 'Too many attempts — try again later.' });
+    return;
+  }
   const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
   if (!username || !password) {
