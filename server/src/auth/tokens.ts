@@ -14,9 +14,10 @@ function secret(): string {
 
 export function signAdminToken(payload: AdminTokenPayload): string {
   const expiresIn = process.env.JWT_EXPIRES_IN || '12h';
-  return jwt.sign(payload, secret(), { expiresIn } as jwt.SignOptions);
+  return jwt.sign(payload, secret(), { expiresIn, algorithm: 'HS256' } as jwt.SignOptions);
 }
 
 export function verifyAdminToken(token: string): AdminTokenPayload {
-  return jwt.verify(token, secret()) as unknown as AdminTokenPayload;
+  // Pin the algorithm so a forged token can't downgrade to 'none' or swap algs.
+  return jwt.verify(token, secret(), { algorithms: ['HS256'] }) as unknown as AdminTokenPayload;
 }

@@ -16,6 +16,16 @@ import { productDir, ensureDir, safeName, relFromRoot } from '../../services/sto
 const router = express.Router();
 router.use(requireAdmin);
 
+// Reject non-numeric ids before multer touches the filesystem.
+router.param('id', (_req, res, next, value) => {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n <= 0) {
+    res.status(400).json({ success: false, error: 'Invalid product id.' });
+    return;
+  }
+  next();
+});
+
 const AUDIO_EXT = new Set(['.wav', '.mp3', '.aiff', '.aif', '.flac', '.m4a', '.ogg']);
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
 
