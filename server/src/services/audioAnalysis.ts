@@ -1,5 +1,7 @@
 import { spawn } from 'child_process';
 import path from 'path';
+import fs from 'fs';
+import os from 'os';
 
 // =============================================================================
 // Audio analysis for the folder-upload pipeline. Every uploaded music file is
@@ -13,7 +15,9 @@ import path from 'path';
 // beatpack/album tracks.
 // =============================================================================
 
-export type SampleKind = 'one_shot' | 'loop' | 'unknown';
+// one_shot = short hit (1–4s), loop = 5–20s musical loop, instrumental = a full
+// beat/instrumental (>20s), unknown = couldn't tell.
+export type SampleKind = 'one_shot' | 'loop' | 'instrumental' | 'unknown';
 
 export interface Analysis {
   kind: SampleKind;
@@ -94,6 +98,7 @@ function fromFilename(filename: string): {
   group: string | null;
   loopHint: boolean;
   oneShotHint: boolean;
+  beatHint: boolean;
 } {
   const base = path.parse(filename).name;
   const spaced = base.replace(/[_\-.]+/g, ' ');
@@ -126,20 +131,31 @@ function fromFilename(filename: string): {
     }
   }
 
-  const loopHint = /\b(loop|groove|riff|break|melody|melodic|topline)\b/i.test(spaced) || bpm !== null;
-  const oneShotHint = /\b(one[-_ ]?shot|oneshot|shot|hit|stab|single)\b/i.test(spaced);
-  return { bpm, key, category, group, loopHint, oneShotHint };
+  const loopHint = /\b(loop|groove|riff|break|topline)\b/i.test(spaced);
+  const oneShotHint = /\b(one[-_ ]?shot|oneshot|shot|hit|stab)\b/i.test(spaced);
+  const beatHint = /\b(type[-_ ]?beat|instrumental|full[-_ ]?beat)\b/i.test(spaced);
+  return { bpm, key, category, group, loopHint, oneShotHint, beatHint };
 }
 
-/** Decide one-shot vs loop from filename hints + duration. */
-function decideKind(durationSec: number | null, loopHint: boolean, oneShotHint: boolean): SampleKind {
-  if (oneShotHint && !loopHint) return 'one_shot';
-  if (loopHint) return 'loop';
+/**
+ * Classify by duration bands (the source of truth) with filename hints breaking
+ * ties when the duration is unknown:
+ *   one-shot 1–4s · loop 5–20s · instrumental/beat >20s
+ */
+function decideKind(
+  durationSec: number | null,
+  loopHint: boolean,
+  oneShotHint: boolean,
+  beatHint: boolean,
+): SampleKind {
   if (durationSec != null) {
-    // Short, decaying sounds are one-shots; anything a couple of seconds+ is a loop.
-    if (durationSec <= 2) return 'one_shot';
-    return 'loop';
+    if (durationSec <= 4) return 'one_shot';
+    if (durationSec <= 20) return 'loop';
+    return 'instrumental';
   }
+  if (beatHint) return 'instrumental';
+  if (oneShotHint) return 'one_shot';
+  if (loopHint) return 'loop';
   return 'unknown';
 }
 
@@ -218,6 +234,49 @@ async function dspKey(absFile: string): Promise<string | null> {
   return q === 'm' || q === 'min' ? `${note} min` : q === 'maj' ? `${note} maj` : note;
 }
 
+const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
+let excerptCounter = 0;
+
+/**
+ * For long files (full beats/songs), analyze a short mono excerpt instead of the
+ * whole thing — tempo/key are stable, and this keeps aubio/keyfinder fast and
+ * inside the timeout. Returns a temp file path (caller deletes) or null.
+ */
+async function makeExcerpt(absFile: string, seconds = 60, startSec = 15): Promise<string | null> {
+  excerptCounter += 1;
+  const tmp = path.join(os.tmpdir(), `dspx_${process.pid}_${excerptCounter}.wav`);
+  const ok = await new Promise<boolean>((resolve) => {
+    let proc: ReturnType<typeof spawn>;
+    try {
+      proc = spawn(
+        FFMPEG,
+        ['-v', 'error', '-ss', String(startSec), '-t', String(seconds), '-i', absFile, '-ac', '1', '-ar', '44100', '-y', tmp],
+        { stdio: 'ignore' },
+      );
+    } catch {
+      resolve(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      try {
+        proc.kill('SIGKILL');
+      } catch {
+        /* ignore */
+      }
+      resolve(false);
+    }, DSP_TIMEOUT_MS);
+    proc.on('error', () => {
+      clearTimeout(timer);
+      resolve(false);
+    });
+    proc.on('close', (code) => {
+      clearTimeout(timer);
+      resolve(code === 0 && fs.existsSync(tmp));
+    });
+  });
+  return ok ? tmp : null;
+}
+
 export interface AnalyzeOpts {
   filename: string;
   durationSec: number | null;
@@ -228,28 +287,46 @@ export interface AnalyzeOpts {
 /** Full analysis: heuristics first, refined by DSP when available. */
 export async function analyzeAudio(opts: AnalyzeOpts): Promise<Analysis> {
   const fn = fromFilename(opts.filename);
-  const kind = decideKind(opts.durationSec, fn.loopHint, fn.oneShotHint);
+  const kind = decideKind(opts.durationSec, fn.loopHint, fn.oneShotHint, fn.beatHint);
 
   let bpm = fn.bpm;
   let key = fn.key;
   let bpmSource: Analysis['bpmSource'] = fn.bpm != null ? 'filename' : null;
   let keySource: Analysis['keySource'] = fn.key != null ? 'filename' : null;
 
-  // DSP only makes sense for loops (BPM) / tonal material (key), and only if a
-  // file path is given and DSP is enabled.
+  // Fill anything the filename didn't give us from the signal. BPM is skipped
+  // only for one-shot hits (a percussive hit has no tempo); key is attempted for
+  // everything tonal. Long files are analyzed from a short excerpt for speed.
   if (opts.useDsp && opts.absFile) {
-    if (bpm == null && kind !== 'one_shot') {
-      const d = await dspBpm(opts.absFile).catch(() => null);
-      if (d != null) {
-        bpm = d;
-        bpmSource = 'dsp';
+    const needBpm = bpm == null && kind !== 'one_shot';
+    const needKey = key == null;
+    if (needBpm || needKey) {
+      let target = opts.absFile;
+      let tmp: string | null = null;
+      if (opts.durationSec != null && opts.durationSec > 90) {
+        tmp = await makeExcerpt(opts.absFile).catch(() => null);
+        if (tmp) target = tmp;
       }
-    }
-    if (key == null) {
-      const k = await dspKey(opts.absFile).catch(() => null);
-      if (k != null) {
-        key = k;
-        keySource = 'dsp';
+      if (needBpm) {
+        const d = await dspBpm(target).catch(() => null);
+        if (d != null) {
+          bpm = d;
+          bpmSource = 'dsp';
+        }
+      }
+      if (needKey) {
+        const k = await dspKey(target).catch(() => null);
+        if (k != null) {
+          key = k;
+          keySource = 'dsp';
+        }
+      }
+      if (tmp) {
+        try {
+          fs.unlinkSync(tmp);
+        } catch {
+          /* best effort */
+        }
       }
     }
   }

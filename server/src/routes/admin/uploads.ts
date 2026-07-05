@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { requireAdmin } from '../../auth/middleware';
 import * as products from '../../services/products';
-import { probe, makeTaggedPreview, extractPeaks, resolveInStorage } from '../../services/media';
+import { probe, makeTaggedPreview, extractPeaks, resolveInStorage, previewStartSec } from '../../services/media';
 import { processCover, SUPPORTED_COVER_EXT } from '../../services/images';
 import { analyzeAudio, prettifyName, keyForFilename, type Analysis } from '../../services/audioAnalysis';
 import { productDir, ensureDir, safeName, relFromRoot } from '../../services/storage';
@@ -29,6 +29,8 @@ router.param('id', (_req, res, next, value) => {
 });
 
 const AUDIO_EXT = new Set(['.wav', '.mp3', '.aiff', '.aif', '.flac', '.m4a', '.ogg']);
+// Types that hold exactly one track — a second file is rejected.
+const SINGULAR_TYPES = new Set(['single']);
 const MAX_FILES = Number(process.env.MAX_UPLOAD_FILES || 300); // sample packs can be large
 const DSP_ENABLED = process.env.AUDIO_DSP !== 'off'; // aubio/keyfinder if present
 const PREVIEW_SET_SIZE = Number(process.env.PREVIEW_SET_SIZE || 10);
@@ -108,12 +110,19 @@ async function buildTrackPreview(
   trackId: number,
   masterAbs: string,
   kind: string | null,
+  durationSec: number | null = null,
 ): Promise<boolean> {
   const previewsDir = path.join(productDir(productId), 'previews');
   ensureDir(previewsDir);
   const previewAbs = path.join(previewsDir, `${trackId}.mp3`);
   try {
-    await makeTaggedPreview(masterAbs, previewAbs, kind === 'one_shot' ? { tagFile: '' } : {});
+    // Start full-length material (beats/songs/loops) from the middle — the more
+    // exciting part. One-shots stay at 0 (nothing to seek). Tag off for one-shots.
+    const startSec = kind === 'one_shot' ? 0 : previewStartSec(durationSec);
+    await makeTaggedPreview(masterAbs, previewAbs, {
+      startSec,
+      ...(kind === 'one_shot' ? { tagFile: '' } : {}),
+    });
     const peaks = await extractPeaks(previewAbs, 400);
     await products.setTrackMedia(trackId, {
       masterPath: relFromRoot(masterAbs),
@@ -161,6 +170,26 @@ router.post('/:id/audio', upload.array('files', MAX_FILES), async (req: Request,
   }
 
   const existing = await products.getTracks(id);
+
+  // Singular types hold exactly one track. Reject a second upload (or a
+  // multi-file upload) so a "single" can never end up with two tracks.
+  if (SINGULAR_TYPES.has(product.type)) {
+    const audioCount = files.filter((f) => AUDIO_EXT.has(path.extname(f.originalname).toLowerCase())).length;
+    if (existing.length >= 1) {
+      cleanup(files);
+      res.status(400).json({
+        success: false,
+        error: `A ${product.type} already has its track. Delete the current track before uploading another.`,
+      });
+      return;
+    }
+    if (audioCount > 1) {
+      cleanup(files);
+      res.status(400).json({ success: false, error: `A ${product.type} accepts only one audio file.` });
+      return;
+    }
+  }
+
   let position = existing.length;
   const added: Array<Record<string, unknown>> = [];
 
@@ -228,9 +257,13 @@ router.post('/:id/audio', upload.array('files', MAX_FILES), async (req: Request,
       lengthSec: meta.durationSec,
       bpm: analysis.bpm,
       musicKey: analysis.key,
-      kind: analysis.kind,
-      sampleGroup: analysis.group,
-      sampleCategory: analysis.category,
+      // one-shot/loop/instrumental is a *sample* taxonomy — only meaningful for
+      // sample packs. A full single/album/beatpack track isn't a "sample", and a
+      // song must never be mislabeled a "beat" by its length. Song-vs-beat is the
+      // product's style (vocal = song, instruments = beat).
+      kind: isSamplePack ? analysis.kind : null,
+      sampleGroup: isSamplePack ? analysis.group : null,
+      sampleCategory: isSamplePack ? analysis.category : null,
       relDir: relDir || null,
       bpmSource: analysis.bpmSource,
       keySource: analysis.keySource,
@@ -245,7 +278,7 @@ router.post('/:id/audio', upload.array('files', MAX_FILES), async (req: Request,
     // Sample packs defer previews to the curated preview set (only ~10 of ~100
     // get one). Singles/albums/beatpacks preview every track, as before.
     if (!isSamplePack) {
-      await buildTrackPreview(id, trackId, masterAbs, analysis.kind);
+      await buildTrackPreview(id, trackId, masterAbs, analysis.kind, meta.durationSec);
     } else {
       await products.setTrackMedia(trackId, { masterPath: relFromRoot(masterAbs), previewPath: null, waveform: null });
     }
@@ -304,7 +337,7 @@ async function autoPickPreviewSet(productId: number, count: number): Promise<num
     } catch {
       continue;
     }
-    const ok = await buildTrackPreview(productId, trackId, masterAbs, track.kind);
+    const ok = await buildTrackPreview(productId, trackId, masterAbs, track.kind, track.length_sec);
     if (ok) await products.setTrackPreview(trackId, true);
   }
   return ids;
@@ -345,7 +378,7 @@ router.post('/:id/tracks/:trackId/preview', async (req: Request, res: Response):
       res.status(400).json({ success: false, error: 'Sample file is unavailable.' });
       return;
     }
-    const ok = await buildTrackPreview(id, trackId, masterAbs, track.kind);
+    const ok = await buildTrackPreview(id, trackId, masterAbs, track.kind, track.length_sec);
     if (!ok) {
       res.status(500).json({ success: false, error: 'Could not build the preview.' });
       return;
@@ -362,6 +395,27 @@ router.post('/:id/tracks/:trackId/preview', async (req: Request, res: Response):
     await products.setTrackPreview(trackId, false);
   }
   res.json({ success: true, previewCount: await products.getPreviewCount(id) });
+});
+
+// --- Delete a single track (removes its master + preview files) --------------
+router.delete('/:id/tracks/:trackId', async (req: Request, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  const trackId = Number(req.params.trackId);
+  const track = await products.getTrackById(trackId);
+  if (!track || track.product_id !== id) {
+    res.status(404).json({ success: false, error: 'Track not found.' });
+    return;
+  }
+  for (const rel of [track.master_path, track.preview_path]) {
+    if (!rel) continue;
+    try {
+      fs.unlinkSync(resolveInStorage(rel));
+    } catch {
+      /* best effort */
+    }
+  }
+  await products.deleteTrack(trackId);
+  res.json({ success: true });
 });
 
 // --- Cover image -------------------------------------------------------------

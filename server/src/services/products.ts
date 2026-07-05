@@ -206,7 +206,7 @@ export interface TrackInput {
   channels?: number | null;
   originalFilename?: string | null;
   // Folder-analysis classification (sample packs + enriched beatpacks/albums).
-  kind?: 'one_shot' | 'loop' | 'unknown' | null;
+  kind?: 'one_shot' | 'loop' | 'instrumental' | 'unknown' | null;
   sampleGroup?: string | null;
   sampleCategory?: string | null;
   isPreview?: boolean;
@@ -322,6 +322,16 @@ export async function getPreviewCount(productId: number): Promise<number> {
     [productId],
   );
   return Number(rows[0]?.n) || 0;
+}
+
+/** Delete a track row and recompute aggregates. Returns the row (for file cleanup). */
+export async function deleteTrack(trackId: number): Promise<TrackRow | null> {
+  const rows = await query<TrackRow[]>('SELECT * FROM music_tracks WHERE id = ?', [trackId]);
+  const row = rows[0];
+  if (!row) return null;
+  await execute('DELETE FROM music_tracks WHERE id = ?', [trackId]);
+  await recomputeMusicAggregates(row.product_id);
+  return row;
 }
 
 // --- Product-level music metadata ------------------------------------------

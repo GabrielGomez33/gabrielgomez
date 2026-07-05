@@ -15,6 +15,9 @@ function fmtSecs(s: number | null): string {
   const r = s % 60
   return `${m}:${String(r).padStart(2, '0')}`
 }
+function kindLabel(k: string | null): string {
+  return k === 'one_shot' ? 'one-shot' : k === 'instrumental' ? 'beat' : k === 'loop' ? 'loop' : '—'
+}
 function fmtBytes(b: number | null): string {
   if (!b) return '—'
   return b > 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.round(b / 1e3)} KB`
@@ -132,6 +135,22 @@ export function ProductEditor() {
     } finally {
       setBusy(false)
       if (folderRef.current) folderRef.current.value = ''
+    }
+  }
+
+  async function handleDeleteTrack(trackId: number) {
+    if (!id || !confirm('Delete this track and its files?')) return
+    setBusy(true)
+    setError('')
+    setMsg('')
+    try {
+      await adminApi.deleteTrack(Number(id), trackId)
+      setMsg('Track deleted.')
+      await loadProduct().catch(() => {})
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delete failed.')
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -265,6 +284,9 @@ export function ProductEditor() {
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>
+              {type === 'single' && (
+                <small className="adm-optional">Instruments = beat/instrumental · Vocal or Mixed = song (with lyrics)</small>
+              )}
             </label>
           </div>
         )}
@@ -318,15 +340,25 @@ export function ProductEditor() {
                     (one-shot vs loop, group, BPM &amp; key). Folder structure is preserved in the download.
                   </p>
                 )}
+                {type === 'single' && (
+                  <p className="adm-muted">A single holds exactly one track.</p>
+                )}
                 <div className="adm-uploads">
                   <label className="adm-drop">
-                    <span>Select files</span>
-                    <input type="file" accept="audio/*" multiple onChange={(e) => handleAudio(e.target.files)} />
+                    <span>{type === 'single' ? 'Select file' : 'Select files'}</span>
+                    <input
+                      type="file"
+                      accept="audio/*"
+                      multiple={type !== 'single'}
+                      onChange={(e) => handleAudio(e.target.files)}
+                    />
                   </label>
-                  <label className="adm-drop">
-                    <span>Select a folder</span>
-                    <input ref={folderRef} type="file" multiple onChange={(e) => handleAudio(e.target.files)} />
-                  </label>
+                  {type !== 'single' && (
+                    <label className="adm-drop">
+                      <span>Select a folder</span>
+                      <input ref={folderRef} type="file" multiple onChange={(e) => handleAudio(e.target.files)} />
+                    </label>
+                  )}
                 </div>
                 {busy && (
                   <p className="adm-muted">
@@ -343,7 +375,7 @@ export function ProductEditor() {
                   {product.tracks && product.tracks.length > 0 ? (
                     <table className="adm-table">
                       <thead>
-                        <tr><th>#</th><th>Name</th><th>Length</th><th>BPM</th><th>Key</th><th>Format</th><th>Size</th><th>Preview</th></tr>
+                        <tr><th>#</th><th>Name</th><th>Length</th><th>BPM</th><th>Key</th><th>Format</th><th>Size</th><th>Preview</th><th></th></tr>
                       </thead>
                       <tbody>
                         {product.tracks.map((t) => (
@@ -356,6 +388,16 @@ export function ProductEditor() {
                             <td>{t.format ?? '—'}</td>
                             <td>{fmtBytes(t.file_size_bytes)}</td>
                             <td>{t.preview_path ? '✓' : '—'}</td>
+                            <td>
+                              <button
+                                className="adm-trackdel"
+                                title="Delete track"
+                                onClick={() => handleDeleteTrack(t.id)}
+                                disabled={busy}
+                              >
+                                ✕
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -505,7 +547,7 @@ function SamplePackEditor({
                     </button>
                   </td>
                   <td>{t.name}</td>
-                  <td>{t.kind === 'one_shot' ? 'one-shot' : t.kind === 'loop' ? 'loop' : '—'}</td>
+                  <td>{kindLabel(t.kind)}</td>
                   <td>{t.sample_category ?? '—'}</td>
                   <td>{t.bpm ?? '—'}</td>
                   <td>{t.music_key ?? '—'}</td>

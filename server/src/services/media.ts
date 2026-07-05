@@ -75,30 +75,43 @@ export async function probe(absFile: string): Promise<ProbeResult> {
 
 const PREVIEW_SECONDS = Number(process.env.PREVIEW_SECONDS || 10);
 
-function previewArgs(masterAbs: string, seconds: number, tagFile?: string): string[] {
+function previewArgs(masterAbs: string, seconds: number, tagFile?: string, startSec = 0): string[] {
+  // `-ss` before the master `-i` seeks only the master input (the tag still
+  // plays from its own start), so the preview is cut from `startSec`.
+  const seek = startSec > 0 ? ['-ss', String(startSec)] : [];
   if (tagFile && fs.existsSync(tagFile)) {
     // Tag plays ONCE at the start (no aloop), mixed over the beat; output is
-    // trimmed to `seconds` from the master.
+    // trimmed to `seconds` from the seek point.
     return [
-      '-y', '-i', masterAbs, '-i', tagFile,
+      '-y', ...seek, '-i', masterAbs, '-i', tagFile,
       '-filter_complex',
       '[1:a]volume=0.6[t];[0:a][t]amix=inputs=2:duration=first:dropout_transition=0[a]',
       '-map', '[a]', '-t', String(seconds), '-ac', '2', '-ar', '44100', '-b:a', '96k',
     ];
   }
-  return ['-y', '-i', masterAbs, '-t', String(seconds), '-ac', '2', '-ar', '44100', '-b:a', '96k'];
+  return ['-y', ...seek, '-i', masterAbs, '-t', String(seconds), '-ac', '2', '-ar', '44100', '-b:a', '96k'];
+}
+
+/**
+ * Where to start the preview: the middle of the track for anything comfortably
+ * longer than the preview (beats/songs — the "exciting part"), or 0 for short
+ * material (one-shots/loops) where there's no middle to seek to.
+ */
+export function previewStartSec(durationSec: number | null | undefined, seconds = PREVIEW_SECONDS): number {
+  if (!durationSec || durationSec <= seconds + 6) return 0;
+  return Math.max(0, Math.round(durationSec / 2 - seconds / 2));
 }
 
 /** Generate the cached 10s tagged preview (offline, on upload). */
 export async function makeTaggedPreview(
   masterAbs: string,
   outAbs: string,
-  opts: { seconds?: number; tagFile?: string } = {},
+  opts: { seconds?: number; tagFile?: string; startSec?: number } = {},
 ): Promise<void> {
   const seconds = opts.seconds ?? PREVIEW_SECONDS;
   const tag = opts.tagFile ?? process.env.PRODUCER_TAG_PATH;
   fs.mkdirSync(path.dirname(outAbs), { recursive: true });
-  const { code, stderr } = await run(FFMPEG, [...previewArgs(masterAbs, seconds, tag), outAbs]);
+  const { code, stderr } = await run(FFMPEG, [...previewArgs(masterAbs, seconds, tag, opts.startSec ?? 0), outAbs]);
   if (code !== 0) throw new Error(`ffmpeg preview failed: ${stderr.slice(0, 300)}`);
 }
 

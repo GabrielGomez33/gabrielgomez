@@ -154,6 +154,9 @@ export const adminApi = {
   async toggleTrackPreview(id: number, trackId: number, on: boolean): Promise<{ previewCount: number }> {
     return jsonReq(`/admin/products/${id}/tracks/${trackId}/preview`, 'POST', { on })
   },
+  async deleteTrack(id: number, trackId: number): Promise<unknown> {
+    return jsonReq(`/admin/products/${id}/tracks/${trackId}`, 'DELETE')
+  },
   async uploadCover(id: number, file: File): Promise<unknown> {
     const fd = new FormData()
     fd.append('image', file)

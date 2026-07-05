@@ -128,6 +128,26 @@ export function formatPrice(cents: number, currency = 'USD'): string {
   if (cents <= 0) return 'Free'
   return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(cents / 100)
 }
+
+/**
+ * Human label for a music product. A single is a "Song" or a "Beat" depending on
+ * its style (instruments = beat/instrumental, vocal/mixed = song with lyrics) —
+ * that's the song-vs-beat distinction, not anything derived from length.
+ */
+export function musicTypeLabel(type: string, style?: string | null): string {
+  switch (type) {
+    case 'single':
+      return style === 'instruments' ? 'Beat' : 'Song'
+    case 'samplepack':
+      return 'Sample pack'
+    case 'beatpack':
+      return 'Beatpack'
+    case 'album':
+      return 'Album'
+    default:
+      return type
+  }
+}
 export function formatSecs(s: number | null): string {
   if (!s && s !== 0) return '—'
   const m = Math.floor(s / 60)

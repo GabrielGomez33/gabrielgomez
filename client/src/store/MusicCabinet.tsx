@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { storeApi, formatPrice, type ProductSummary, type ProductDetail as PD } from './storeApi'
+import { storeApi, formatPrice, musicTypeLabel, type ProductSummary, type ProductDetail as PD } from './storeApi'
 import { WaveformPlayer } from './WaveformPlayer'
 import { useCart } from './CartContext'
 
@@ -18,18 +18,26 @@ const FACETS: { key: Facet; label: string }[] = [
   { key: 'price', label: 'Price' },
 ]
 
-const TYPE_ORDER = ['single', 'beatpack', 'album']
-const TYPE_LABEL: Record<string, string> = { single: 'Singles', beatpack: 'Beatpacks', album: 'Albums' }
-
 function titleCase(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+// Ordering + plural labels for the Type drawer. Singles split into Songs/Beats.
+const TYPE_META: Record<string, { label: string; order: number }> = {
+  song: { label: 'Songs', order: 0 },
+  beat: { label: 'Beats', order: 1 },
+  beatpack: { label: 'Beatpacks', order: 2 },
+  samplepack: { label: 'Sample packs', order: 3 },
+  album: { label: 'Albums', order: 4 },
 }
 
 // The value + display label a product falls under for the active facet.
 function facetOf(p: ProductSummary, facet: Facet): { key: string; label: string; order: number } {
   if (facet === 'type') {
-    const idx = TYPE_ORDER.indexOf(p.type)
-    return { key: p.type, label: TYPE_LABEL[p.type] ?? titleCase(p.type), order: idx < 0 ? 99 : idx }
+    // A single is a Song or a Beat depending on its style (instruments = beat).
+    const key = p.type === 'single' ? (p.style === 'instruments' ? 'beat' : 'song') : p.type
+    const meta = TYPE_META[key]
+    return { key, label: meta?.label ?? titleCase(key), order: meta?.order ?? 99 }
   }
   if (facet === 'genre') {
     const g = (p.genre || '').trim()
@@ -223,7 +231,7 @@ function Folder({
       >
         <span className="cab__num">{String(index).padStart(3, '0')}</span>
         <span className="cab__name">{product.title}</span>
-        <span className="cab__meta">{product.type}</span>
+        <span className="cab__meta">{musicTypeLabel(product.type, product.style)}</span>
         <span className="cab__price">{formatPrice(product.price_cents, product.currency)}</span>
       </button>
 
