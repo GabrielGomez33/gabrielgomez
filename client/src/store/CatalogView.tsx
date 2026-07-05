@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { storeApi, type Category, type ProductSummary } from './storeApi'
 import { ProductCard } from './ProductCard'
+import { MusicCabinet } from './MusicCabinet'
 
 const HEADINGS: Record<Category, { title: string; blurb: string }> = {
   music: { title: 'SonSoul', blurb: 'Beats, beatpacks & albums. Cloudy, ethereal, alternative.' },
@@ -9,6 +10,12 @@ const HEADINGS: Record<Category, { title: string; blurb: string }> = {
 }
 
 export function CatalogView({ category }: { category: Category }) {
+  // Music gets the filing-cabinet browser; other categories use the grid.
+  if (category === 'music') return <MusicCabinet />
+  return <CatalogGrid category={category} />
+}
+
+function CatalogGrid({ category }: { category: Category }) {
   const [products, setProducts] = useState<ProductSummary[] | null>(null)
   const [error, setError] = useState('')
 

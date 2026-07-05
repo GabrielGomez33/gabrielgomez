@@ -267,9 +267,13 @@ router.get('/me', requireCustomer, async (req: Request, res: Response): Promise<
 router.get('/orders', requireCustomer, async (req: Request, res: Response): Promise<void> => {
   // Pick up any matching guest orders placed before/around sign-in.
   await linkGuestOrders(req.customer!.id, req.customer!.email);
+  // Only real orders — hide abandoned 'created'/'pending' attempts (a new one is
+  // written every time the PayPal button is opened) and 'cancelled' noise.
   const orders = await query<RowDataPacket[]>(
     `SELECT id, order_number, status, total_cents, currency, created_at
-     FROM orders WHERE customer_id = ? ORDER BY created_at DESC LIMIT 100`,
+     FROM orders
+     WHERE customer_id = ? AND status IN ('paid','fulfilled','refunded')
+     ORDER BY created_at DESC LIMIT 100`,
     [req.customer!.id],
   );
   for (const o of orders) {

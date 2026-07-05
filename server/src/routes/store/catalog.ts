@@ -67,9 +67,23 @@ router.get('/options', async (req: Request, res: Response): Promise<void> => {
 router.get('/products', async (req: Request, res: Response): Promise<void> => {
   const category = req.query.category as products.Category | undefined;
   const rows = await products.listProducts({ category, status: 'published' });
+  // Attach genre/style/track_count for music rows so the storefront can group
+  // and filter by them (one batched query, no N+1).
+  const musicIds = rows.filter((r) => r.category === 'music').map((r) => r.id);
+  const meta = await products.getMusicMetaForProducts(musicIds);
   res.json({
     success: true,
-    products: rows.map((r) => ({ ...r, coverUrl: coverUrl(r), coverThumbUrl: coverThumbUrl(r) })),
+    products: rows.map((r) => {
+      const mm = meta.get(r.id);
+      return {
+        ...r,
+        coverUrl: coverUrl(r),
+        coverThumbUrl: coverThumbUrl(r),
+        genre: mm?.genre ?? null,
+        style: mm?.style ?? null,
+        trackCount: mm?.trackCount ?? 0,
+      };
+    }),
   });
 });
 

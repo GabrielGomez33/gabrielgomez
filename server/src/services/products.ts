@@ -270,6 +270,23 @@ export async function getMusicMeta(productId: number): Promise<RowDataPacket | n
   return rows[0] ?? null;
 }
 
+/** Batch genre/style/track_count for a set of products (one query, for listings). */
+export async function getMusicMetaForProducts(
+  ids: number[],
+): Promise<Map<number, { genre: string | null; style: string | null; trackCount: number }>> {
+  const map = new Map<number, { genre: string | null; style: string | null; trackCount: number }>();
+  if (ids.length === 0) return map;
+  const placeholders = ids.map(() => '?').join(',');
+  const rows = await query<RowDataPacket[]>(
+    `SELECT product_id, genre, style, track_count FROM music_meta WHERE product_id IN (${placeholders})`,
+    ids,
+  );
+  for (const r of rows) {
+    map.set(r.product_id, { genre: r.genre ?? null, style: r.style ?? null, trackCount: Number(r.track_count) || 0 });
+  }
+  return map;
+}
+
 export interface TrackRow extends RowDataPacket {
   id: number;
   product_id: number;
