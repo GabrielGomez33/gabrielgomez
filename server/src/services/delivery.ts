@@ -1,6 +1,5 @@
 import crypto from 'crypto';
 import fs from 'fs';
-import path from 'path';
 import { type Response } from 'express';
 import archiver from 'archiver';
 import { type RowDataPacket } from 'mysql2/promise';
@@ -93,9 +92,8 @@ export function streamZip(res: Response, storageRelDir: string, downloadName: st
     if (!res.headersSent) res.status(500).end();
   });
   archive.pipe(res);
-  for (const name of fs.readdirSync(absDir)) {
-    const abs = path.join(absDir, name);
-    if (fs.statSync(abs).isFile()) archive.file(abs, { name });
-  }
+  // Recurse so sample-pack folder structure (drums/…, loops/…) is preserved in
+  // the zip, not flattened. `false` = no extra top-level wrapper directory.
+  archive.directory(absDir, false);
   archive.finalize();
 }

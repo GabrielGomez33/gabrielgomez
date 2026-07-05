@@ -191,7 +191,11 @@ function Folder({
       .finally(() => setLoadingDetail(false))
   }, [open, detail, loadingDetail, product.slug])
 
-  const firstTrack = detail?.tracks?.[0]
+  // Prefer a track that actually has a preview (sample packs only preview ~10).
+  const firstTrack =
+    detail?.previewTracks?.find((t) => t.previewUrl) ||
+    detail?.tracks?.find((t) => t.previewUrl) ||
+    detail?.tracks?.[0]
   const cover = product.coverUrl || detail?.coverUrl || null
 
   function addToCart() {

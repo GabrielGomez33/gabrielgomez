@@ -32,7 +32,36 @@ function publicizeTrack(track: RowDataPacket): Record<string, unknown> {
 
 async function publicizeProduct(row: products.ProductRow): Promise<Record<string, unknown>> {
   const full = await products.getFullProduct(row);
-  return { ...full, coverUrl: coverUrl(row), tracks: (full.tracks as RowDataPacket[]).map(publicizeTrack) };
+  const tracks = (full.tracks as RowDataPacket[]).map(publicizeTrack);
+  const base = { ...full, coverUrl: coverUrl(row), tracks };
+
+  // Sample packs: surface the curated preview set separately and a summary of
+  // what's inside (counts by group, one-shot/loop split, BPM range), so the
+  // storefront can show an auditioner + a full manifest without exposing masters.
+  if (row.type === 'samplepack') {
+    const previewTracks = tracks.filter((t) => (t as { is_preview?: number }).is_preview && (t as { previewUrl?: string }).previewUrl);
+    const byGroup: Record<string, number> = {};
+    let oneShots = 0;
+    let loops = 0;
+    let bpmMin: number | null = null;
+    let bpmMax: number | null = null;
+    for (const t of full.tracks as RowDataPacket[]) {
+      const g = (t.sample_group as string) || 'other';
+      byGroup[g] = (byGroup[g] || 0) + 1;
+      if (t.kind === 'one_shot') oneShots++;
+      else if (t.kind === 'loop') loops++;
+      if (t.bpm) {
+        bpmMin = bpmMin == null ? t.bpm : Math.min(bpmMin, t.bpm);
+        bpmMax = bpmMax == null ? t.bpm : Math.max(bpmMax, t.bpm);
+      }
+    }
+    return {
+      ...base,
+      previewTracks,
+      sampleSummary: { total: (full.tracks as unknown[]).length, oneShots, loops, byGroup, bpmMin, bpmMax },
+    };
+  }
+  return base;
 }
 
 // Public storefront config (publishable values only — no secrets).

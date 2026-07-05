@@ -63,6 +63,14 @@ export interface Track {
   bitrate_kbps: number | null
   file_size_bytes: number | null
   preview_path: string | null
+  // Folder-analysis classification (sample packs + enriched beatpacks/albums).
+  kind: 'one_shot' | 'loop' | 'unknown' | null
+  sample_group: string | null
+  sample_category: string | null
+  is_preview: number
+  bpm: number | null
+  music_key: string | null
+  rel_dir: string | null
 }
 export interface Variant {
   id: number
@@ -119,15 +127,32 @@ export const adminApi = {
     const data = await jsonReq<{ options: AttrOption[] }>(`/admin/options${q}`, 'GET')
     return data.options
   },
-  async uploadAudio(id: number, files: File[], meta: { genre?: string; style?: string }): Promise<unknown> {
+  async uploadAudio(
+    id: number,
+    files: File[],
+    meta: { genre?: string; style?: string },
+  ): Promise<{ added?: unknown[]; isSamplePack?: boolean; previewCount?: number }> {
     const fd = new FormData()
-    for (const f of files) fd.append('files', f)
+    // Preserve folder structure: send each file's relative path (from a folder
+    // upload) aligned by order with the files.
+    const relPaths: string[] = []
+    for (const f of files) {
+      fd.append('files', f)
+      relPaths.push((f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name)
+    }
+    fd.append('relPaths', JSON.stringify(relPaths))
     if (meta.genre) fd.append('genre', meta.genre)
     if (meta.style) fd.append('style', meta.style)
     const res = await fetch(`${BASE}/admin/products/${id}/audio`, { method: 'POST', headers: authHeader(), body: fd })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error((data as { error?: string }).error || 'Upload failed')
     return data
+  },
+  async autoPreviewSet(id: number, count = 10): Promise<{ previewCount: number }> {
+    return jsonReq(`/admin/products/${id}/preview-set/auto`, 'POST', { count })
+  },
+  async toggleTrackPreview(id: number, trackId: number, on: boolean): Promise<{ previewCount: number }> {
+    return jsonReq(`/admin/products/${id}/tracks/${trackId}/preview`, 'POST', { on })
   },
   async uploadCover(id: number, file: File): Promise<unknown> {
     const fd = new FormData()

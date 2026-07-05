@@ -15,6 +15,10 @@ export default defineConfig({
     sourcemap: true,
   },
   server: {
+    // Bind to 0.0.0.0 so `npm run dev` is reachable from other devices on the
+    // LAN (phone, another laptop) — open http://<your-lan-ip>:5173/GabrielGomez/.
+    host: true,
+    port: 5173,
     // Local dev proxy to the production backend so /GabrielGomez/api works the
     // same in dev as it does behind Apache in production.
     proxy: {
@@ -24,5 +28,10 @@ export default defineConfig({
         secure: true,
       },
     },
+  },
+  preview: {
+    // Same LAN binding for `npm run preview` (serves the production build).
+    host: true,
+    port: 4173,
   },
 })

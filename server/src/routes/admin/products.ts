@@ -217,7 +217,12 @@ router.post('/:id/publish', async (req: Request, res: Response): Promise<void> =
     const mm = full.musicMeta as { genre?: string; style?: string } | null;
     if (!mm?.genre) missing.push('genre');
     if (!mm?.style) missing.push('style');
-    if ((full.tracks as unknown[]).length === 0) missing.push('at least one track');
+    const tracks = full.tracks as Array<{ is_preview?: number }>;
+    if (tracks.length === 0) {
+      missing.push(row.type === 'samplepack' ? 'at least one sample' : 'at least one track');
+    } else if (row.type === 'samplepack' && !tracks.some((t) => t.is_preview)) {
+      missing.push('at least one preview sample (use Auto-pick previews)');
+    }
   } else if ((full.variants as unknown[]).length === 0) {
     missing.push('at least one variant');
   }
