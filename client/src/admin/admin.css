@@ -122,3 +122,5 @@
 .adm-trackdel { background: none; border: none; color: var(--ash); cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0.2rem 0.4rem; }
 .adm-trackdel:hover:not(:disabled) { color: #ff8b8b; }
 .adm-trackdel:disabled { opacity: 0.4; cursor: default; }
+
+.adm-reanalyze { margin-top: 1rem; }

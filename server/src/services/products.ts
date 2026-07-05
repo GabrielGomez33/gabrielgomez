@@ -324,6 +324,30 @@ export async function getPreviewCount(productId: number): Promise<number> {
   return Number(rows[0]?.n) || 0;
 }
 
+/** Update a track's analysis fields (BPM/key always; classification for samples). */
+export async function updateTrackAnalysis(
+  trackId: number,
+  a: {
+    bpm: number | null;
+    musicKey: string | null;
+    bpmSource: string | null;
+    keySource: string | null;
+    kind?: string | null;
+    sampleGroup?: string | null;
+    sampleCategory?: string | null;
+    applyClassification?: boolean;
+  },
+): Promise<void> {
+  const sets = ['bpm = ?', 'music_key = ?', 'bpm_source = ?', 'key_source = ?'];
+  const params: unknown[] = [a.bpm ?? null, a.musicKey ?? null, emptyToNull(a.bpmSource), emptyToNull(a.keySource)];
+  if (a.applyClassification) {
+    sets.push('kind = ?', 'sample_group = ?', 'sample_category = ?');
+    params.push(emptyToNull(a.kind), emptyToNull(a.sampleGroup), emptyToNull(a.sampleCategory));
+  }
+  params.push(trackId);
+  await execute(`UPDATE music_tracks SET ${sets.join(', ')} WHERE id = ?`, params);
+}
+
 /** Delete a track row and recompute aggregates. Returns the row (for file cleanup). */
 export async function deleteTrack(trackId: number): Promise<TrackRow | null> {
   const rows = await query<TrackRow[]>('SELECT * FROM music_tracks WHERE id = ?', [trackId]);

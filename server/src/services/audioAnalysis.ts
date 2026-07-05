@@ -160,7 +160,6 @@ function decideKind(
 }
 
 // --- Optional DSP layer ------------------------------------------------------
-const AUBIO = process.env.AUBIO_TEMPO_PATH || process.env.AUBIO_PATH || 'aubio';
 const KEYFINDER = process.env.KEYFINDER_PATH || 'keyfinder-cli';
 const DSP_TIMEOUT_MS = Number(process.env.DSP_TIMEOUT_MS || 12000);
 
@@ -173,7 +172,11 @@ function warnMissing(bin: string): void {
   console.warn(`[audioAnalysis] DSP tool not found: ${bin} — falling back to filename heuristics. Install it or set its *_PATH env.`);
 }
 
-function runCapture(bin: string, args: string[]): Promise<string | null> {
+interface RunResult {
+  out: string | null;
+  missing: boolean; // binary not found (ENOENT / spawn failed)
+}
+function runCapture(bin: string, args: string[], quiet = false): Promise<RunResult> {
   return new Promise((resolve) => {
     let out = '';
     let done = false;
@@ -181,8 +184,8 @@ function runCapture(bin: string, args: string[]): Promise<string | null> {
     try {
       proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'ignore'] });
     } catch {
-      warnMissing(bin);
-      resolve(null);
+      if (!quiet) warnMissing(bin);
+      resolve({ out: null, missing: true });
       return;
     }
     const timer = setTimeout(() => {
@@ -193,7 +196,7 @@ function runCapture(bin: string, args: string[]): Promise<string | null> {
         } catch {
           /* ignore */
         }
-        resolve(null);
+        resolve({ out: null, missing: false });
       }
     }, DSP_TIMEOUT_MS);
     proc.stdout?.on('data', (d) => (out += d.toString()));
@@ -201,41 +204,74 @@ function runCapture(bin: string, args: string[]): Promise<string | null> {
       if (!done) {
         done = true;
         clearTimeout(timer);
-        if (err?.code === 'ENOENT') warnMissing(bin);
-        resolve(null);
+        const missing = err?.code === 'ENOENT';
+        if (missing && !quiet) warnMissing(bin);
+        resolve({ out: null, missing });
       }
     });
     proc.on('close', (code) => {
       if (done) return;
       done = true;
       clearTimeout(timer);
-      resolve(code === 0 ? out : null);
+      resolve({ out: code === 0 ? out : null, missing: false });
     });
   });
 }
 
-// The aubio multi-tool takes `aubio tempo <file>`; the standalone binary is just
-// `aubiotempo <file>` (no subcommand). Detect which one is configured.
-function aubioTempoArgs(absFile: string): string[] {
-  return path.basename(AUBIO).replace(/\.exe$/, '') === 'aubiotempo' ? [absFile] : ['tempo', absFile];
+// Beat-tracking tempo tools vary by distro: the `aubio` multitool wants
+// `aubio tempo <file>`, while the standalone binaries `aubiotrack` / `aubiotempo`
+// take just `<file>`. Try each until one is present and yields a tempo.
+function aubioCandidates(absFile: string): Array<{ bin: string; args: string[] }> {
+  const list: Array<{ bin: string; args: string[] }> = [];
+  const seen = new Set<string>();
+  const add = (bin: string, args: string[]) => {
+    if (bin && !seen.has(bin)) {
+      seen.add(bin);
+      list.push({ bin, args });
+    }
+  };
+  const asStandalone = (b: string) => /aubiotrack|aubiotempo/.test(path.basename(b));
+  if (process.env.AUBIO_TEMPO_PATH) {
+    const b = process.env.AUBIO_TEMPO_PATH;
+    add(b, asStandalone(b) ? [absFile] : ['tempo', absFile]);
+  }
+  if (process.env.AUBIO_PATH) add(process.env.AUBIO_PATH, ['tempo', absFile]);
+  add('aubio', ['tempo', absFile]);
+  add('aubiotrack', [absFile]);
+  add('aubiotempo', [absFile]);
+  return list;
 }
 
-/** aubio tempo → median BPM. It prints one beat timestamp (seconds) per line. */
-async function dspBpm(absFile: string): Promise<number | null> {
-  const out = await runCapture(AUBIO, aubioTempoArgs(absFile));
-  if (!out) return null;
-  const times = out
-    .split(/\s+/)
-    .map(Number)
-    .filter((n) => Number.isFinite(n) && n > 0);
-  if (times.length < 3) return null;
+/** Parse aubio beat-tracker output (beat timestamps in seconds) → median BPM. */
+function bpmFromTimestamps(out: string): number | null {
+  // Some builds prefix each line with "bpm:" or similar; grab the numbers.
+  const nums = out.split(/\s+/).map(Number).filter((n) => Number.isFinite(n) && n > 0);
+  if (nums.length < 3) return null;
   const intervals: number[] = [];
-  for (let i = 1; i < times.length; i++) intervals.push(times[i] - times[i - 1]);
+  for (let i = 1; i < nums.length; i++) {
+    const d = nums[i] - nums[i - 1];
+    if (d > 0.1 && d < 3) intervals.push(d); // plausible beat spacing (20–600 BPM)
+  }
+  if (intervals.length < 2) return null;
   intervals.sort((a, b) => a - b);
   const median = intervals[Math.floor(intervals.length / 2)];
   if (!median || median <= 0) return null;
   const bpm = Math.round(60 / median);
   return bpm >= 40 && bpm <= 300 ? bpm : null;
+}
+
+async function dspBpm(absFile: string): Promise<number | null> {
+  let anyFound = false;
+  for (const c of aubioCandidates(absFile)) {
+    const { out, missing } = await runCapture(c.bin, c.args, true);
+    if (!missing) anyFound = true;
+    if (out) {
+      const bpm = bpmFromTimestamps(out);
+      if (bpm) return bpm;
+    }
+  }
+  if (!anyFound) warnMissing('aubio (tried aubio/aubiotrack/aubiotempo — install aubio-tools)');
+  return null;
 }
 
 /**
@@ -244,7 +280,7 @@ async function dspBpm(absFile: string): Promise<number | null> {
  * notation flag and detected nothing.
  */
 async function dspKey(absFile: string): Promise<string | null> {
-  const out = await runCapture(KEYFINDER, [absFile]);
+  const { out } = await runCapture(KEYFINDER, [absFile]);
   if (!out) return null;
   const text = out.trim();
   // Handle "A minor", "Am", "Abm", "F# major", "C#" etc.
