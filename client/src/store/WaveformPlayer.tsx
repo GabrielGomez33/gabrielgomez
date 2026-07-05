@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { formatSecs } from './storeApi'
 
 // Smooth, flowing multi-line waveform (dark bg, luminous white lines) with a
@@ -21,8 +21,7 @@ export function WaveformPlayer({ previewUrl, peaks, onNeedFreshUrl }: Props) {
 
   const data = peaks && peaks.length ? peaks : null
 
-  // Draw the waveform whenever peaks or progress change.
-  useEffect(() => {
+  const draw = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
@@ -31,6 +30,7 @@ export function WaveformPlayer({ previewUrl, peaks, onNeedFreshUrl }: Props) {
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
     const w = canvas.clientWidth
     const h = canvas.clientHeight
+    if (w === 0 || h === 0) return // not laid out yet — the ResizeObserver will redraw
     canvas.width = w * dpr
     canvas.height = h * dpr
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -77,6 +77,19 @@ export function WaveformPlayer({ previewUrl, peaks, onNeedFreshUrl }: Props) {
       ctx.stroke()
     }
   }, [data, progress])
+
+  // Redraw on data/progress change and whenever the canvas is resized (incl.
+  // the initial 0→width layout pass), so the waveform is never blank.
+  useEffect(() => {
+    draw()
+  }, [draw])
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => draw())
+    ro.observe(canvas)
+    return () => ro.disconnect()
+  }, [draw])
 
   function ensureAudio(url: string): HTMLAudioElement {
     if (!audioRef.current) {
