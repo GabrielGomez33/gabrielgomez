@@ -257,9 +257,13 @@ router.post('/:id/audio', upload.array('files', MAX_FILES), async (req: Request,
       lengthSec: meta.durationSec,
       bpm: analysis.bpm,
       musicKey: analysis.key,
-      kind: analysis.kind,
-      sampleGroup: analysis.group,
-      sampleCategory: analysis.category,
+      // one-shot/loop/instrumental is a *sample* taxonomy — only meaningful for
+      // sample packs. A full single/album/beatpack track isn't a "sample", and a
+      // song must never be mislabeled a "beat" by its length. Song-vs-beat is the
+      // product's style (vocal = song, instruments = beat).
+      kind: isSamplePack ? analysis.kind : null,
+      sampleGroup: isSamplePack ? analysis.group : null,
+      sampleCategory: isSamplePack ? analysis.category : null,
       relDir: relDir || null,
       bpmSource: analysis.bpmSource,
       keySource: analysis.keySource,

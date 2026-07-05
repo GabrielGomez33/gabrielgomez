@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { formatPrice, type ProductSummary } from './storeApi'
+import { formatPrice, musicTypeLabel, type ProductSummary } from './storeApi'
 
 export function ProductCard({ product }: { product: ProductSummary }) {
   return (
@@ -19,7 +19,9 @@ export function ProductCard({ product }: { product: ProductSummary }) {
           <span className="pcard__price">{formatPrice(product.price_cents, product.currency)}</span>
         </div>
         {product.subtitle && <p className="pcard__sub">{product.subtitle}</p>}
-        <span className="pcard__type">{product.type}</span>
+        <span className="pcard__type">
+          {product.category === 'music' ? musicTypeLabel(product.type, product.style) : product.type}
+        </span>
       </div>
     </Link>
   )

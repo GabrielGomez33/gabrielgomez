@@ -284,6 +284,9 @@ export function ProductEditor() {
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>
+              {type === 'single' && (
+                <small className="adm-optional">Instruments = beat/instrumental · Vocal or Mixed = song (with lyrics)</small>
+              )}
             </label>
           </div>
         )}

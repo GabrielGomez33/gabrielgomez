@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { storeApi, formatPrice, formatSecs, type ProductDetail as PD, type Variant } from './storeApi'
+import { storeApi, formatPrice, formatSecs, musicTypeLabel, type ProductDetail as PD, type Variant } from './storeApi'
 import { WaveformPlayer } from './WaveformPlayer'
 import { useCart } from './CartContext'
 
@@ -115,7 +115,9 @@ export function ProductDetail() {
       </div>
 
       <div className="pdetail__info">
-        <p className="pdetail__type">{product.type}</p>
+        <p className="pdetail__type">
+          {isMusic ? musicTypeLabel(product.type, product.musicMeta?.style as string | undefined) : product.type}
+        </p>
         <h1 className="pdetail__title">{product.title}</h1>
         {product.subtitle && <p className="pdetail__sub">{product.subtitle}</p>}
         <p className="pdetail__price">{formatPrice(unitCents, product.currency)}</p>
