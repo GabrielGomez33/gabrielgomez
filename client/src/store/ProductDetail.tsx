@@ -6,6 +6,10 @@ import { useCart } from './CartContext'
 
 type Tab = 'overview' | 'details'
 
+function kindLabel(k: string | null): string | null {
+  return k === 'one_shot' ? 'one-shot' : k === 'instrumental' ? 'beat' : k === 'loop' ? 'loop' : null
+}
+
 export function ProductDetail() {
   const { slug } = useParams()
   const navigate = useNavigate()
@@ -178,7 +182,7 @@ export function ProductDetail() {
                           <div className="track__head">
                             <span className="track__name">{t.name}</span>
                             <span className="track__len">
-                              {[t.kind === 'one_shot' ? 'one-shot' : t.kind === 'loop' ? 'loop' : null,
+                              {[kindLabel(t.kind),
                                 t.bpm ? `${t.bpm} BPM` : null,
                                 t.music_key,
                               ].filter(Boolean).join(' · ')}
@@ -209,7 +213,7 @@ export function ProductDetail() {
                           <li key={t.id}>
                             <span className="samplepack__name">{t.name}</span>
                             <span className="samplepack__tags">
-                              {[t.kind === 'one_shot' ? 'one-shot' : t.kind === 'loop' ? 'loop' : null,
+                              {[kindLabel(t.kind),
                                 t.bpm ? `${t.bpm} BPM` : null,
                                 t.music_key,
                               ].filter(Boolean).join(' · ')}
