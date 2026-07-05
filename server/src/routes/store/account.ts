@@ -265,6 +265,8 @@ router.get('/me', requireCustomer, async (req: Request, res: Response): Promise<
 
 // --- Order history -----------------------------------------------------------
 router.get('/orders', requireCustomer, async (req: Request, res: Response): Promise<void> => {
+  // Pick up any matching guest orders placed before/around sign-in.
+  await linkGuestOrders(req.customer!.id, req.customer!.email);
   const orders = await query<RowDataPacket[]>(
     `SELECT id, order_number, status, total_cents, currency, created_at
      FROM orders WHERE customer_id = ? ORDER BY created_at DESC LIMIT 100`,
@@ -281,6 +283,7 @@ router.get('/orders', requireCustomer, async (req: Request, res: Response): Prom
 
 // --- Active downloads (re-download library) ---------------------------------
 router.get('/downloads', requireCustomer, async (req: Request, res: Response): Promise<void> => {
+  await linkGuestOrders(req.customer!.id, req.customer!.email);
   const rows = await query<RowDataPacket[]>(
     `SELECT dg.token, dg.expires_at, dg.download_count, dg.max_downloads, oi.title_snapshot, o.order_number
      FROM download_grants dg

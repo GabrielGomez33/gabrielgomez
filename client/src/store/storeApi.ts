@@ -1,5 +1,13 @@
 // Public storefront API client. All calls return typed data or throw a friendly Error.
+import { getToken } from './account/accountApi'
+
 const BASE = '/GabrielGomez/api'
+
+// Attach the customer token when signed in, so orders link to the account.
+function authHeader(): Record<string, string> {
+  const t = getToken()
+  return t ? { Authorization: `Bearer ${t}` } : {}
+}
 
 async function get<T>(path: string): Promise<T> {
   let res: Response
@@ -18,7 +26,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   try {
     res = await fetch(`${BASE}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
       body: JSON.stringify(body),
     })
   } catch {
