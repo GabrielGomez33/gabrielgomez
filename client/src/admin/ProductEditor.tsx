@@ -93,7 +93,7 @@ export function ProductEditor() {
         await adminApi.updateProduct(Number(id), { title, subtitle, description, priceCents })
         if (category === 'music') await adminApi.setMusicMeta(Number(id), { genre, style, notes })
         setMsg('Saved.')
-        await loadProduct()
+        await loadProduct().catch(() => {})
       } else {
         const { product: p } = await adminApi.createProduct({
           category,
@@ -121,7 +121,7 @@ export function ProductEditor() {
     try {
       await adminApi.uploadAudio(Number(id), Array.from(files), { genre, style })
       setMsg('Audio uploaded — previews + waveforms generated.')
-      await loadProduct()
+      await loadProduct().catch(() => {})
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed.')
     } finally {
@@ -136,7 +136,7 @@ export function ProductEditor() {
     try {
       await adminApi.uploadCover(Number(id), file)
       setMsg('Cover uploaded.')
-      await loadProduct()
+      await loadProduct().catch(() => {})
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Cover failed.')
     } finally {
@@ -150,7 +150,7 @@ export function ProductEditor() {
     try {
       const r = await adminApi.publish(Number(id))
       setMsg(r.paypalWarning ? `Published. Note: ${r.paypalWarning}` : 'Published + PayPal product created.')
-      await loadProduct()
+      await loadProduct().catch(() => {})
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Publish failed.')
     } finally {
