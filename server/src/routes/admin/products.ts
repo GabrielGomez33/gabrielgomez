@@ -217,7 +217,8 @@ router.post('/:id/publish', async (req: Request, res: Response): Promise<void> =
       const appBase = process.env.APP_URL || 'https://www.theundergroundrailroad.world/GabrielGomez';
       const pp = await createCatalogProduct({
         name: row.title.slice(0, 127),
-        description: (row.description ?? row.subtitle ?? row.title).slice(0, 256),
+        // Use || (not ??) so an empty-string description falls back — PayPal 400s on "".
+        description: (row.description || row.subtitle || row.title || 'SonSoul').slice(0, 256),
         type: row.is_digital ? 'DIGITAL' : 'PHYSICAL',
         homeUrl: `${appBase}/store/${row.slug}`,
         requestId: `sonsoul-product-${row.id}`,

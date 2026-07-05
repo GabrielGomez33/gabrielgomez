@@ -48,6 +48,8 @@ export function Checkout() {
   const [success, setSuccess] = useState<{ orderNumber: string; downloads?: string[] } | null>(null)
 
   const hasPhysical = cart.items.some((i) => !i.isDigital)
+  const isFree = cart.subtotalCents <= 0 && !hasPhysical && cart.items.length > 0
+  const [claiming, setClaiming] = useState(false)
   const [email, setEmail] = useState(customer?.email ?? '')
   const [ship, setShip] = useState({ name: '', line1: '', city: '', region: '', postal: '', country: '' })
 
@@ -70,8 +72,32 @@ export function Checkout() {
     storeApi.config().then(setConfig).catch(() => setError('Could not load checkout. Please try again.'))
   }, [])
 
+  async function claimFree() {
+    setError('')
+    if (!validEmail(email)) {
+      setError('Enter a valid email for your downloads.')
+      return
+    }
+    setClaiming(true)
+    try {
+      const items = cart.items.map((i) => ({
+        productId: i.productId,
+        variantId: i.variantId ?? undefined,
+        licenseTier: i.licenseTier ?? undefined,
+        quantity: i.quantity,
+      }))
+      const r = await storeApi.claimFree({ email: email.trim().toLowerCase(), items })
+      cart.clear()
+      setSuccess({ orderNumber: r.orderNumber, downloads: r.downloads })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not complete your free order. Please try again.')
+    } finally {
+      setClaiming(false)
+    }
+  }
+
   useEffect(() => {
-    if (!config?.paypalClientId || renderedRef.current || !containerRef.current || success) return
+    if (isFree || !config?.paypalClientId || renderedRef.current || !containerRef.current || success) return
     renderedRef.current = true
     loadSdk(config.paypalClientId, config.currency)
       .then(() => {
@@ -119,7 +145,7 @@ export function Checkout() {
         renderedRef.current = false
         setError('Could not load PayPal. Refresh and try again.')
       })
-  }, [config, success, hasPhysical, cart])
+  }, [config, success, hasPhysical, cart, isFree])
 
   if (success) {
     return (
@@ -169,8 +195,16 @@ export function Checkout() {
           )}
 
           {error && <p className="checkout__error" role="alert">{error}</p>}
-          <div ref={containerRef} className="checkout__paypal" />
-          {!config && <p className="state">Loading payment…</p>}
+          {isFree ? (
+            <button type="button" className="st__btn checkout__free-btn" onClick={claimFree} disabled={claiming}>
+              {claiming ? 'Preparing your download…' : 'Get it free'}
+            </button>
+          ) : (
+            <>
+              <div ref={containerRef} className="checkout__paypal" />
+              {!config && <p className="state">Loading payment…</p>}
+            </>
+          )}
         </div>
 
         <aside className="checkout__summary">

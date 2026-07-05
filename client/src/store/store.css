@@ -163,6 +163,8 @@
 .checkout__ship-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; }
 .checkout__error { color: #ff8b8b; font-size: 0.85rem; border-left: 2px solid #ff8b8b; padding-left: 0.7rem; }
 .checkout__paypal { min-height: 46px; margin-top: 0.5rem; }
+.checkout__free-btn { width: 100%; margin-top: 0.5rem; }
+.checkout__free-btn:disabled { opacity: 0.6; cursor: default; }
 .checkout__summary { border: 1px solid var(--line); border-radius: 14px; padding: 1.4rem; }
 .checkout__summary h2 { font-family: var(--font-display); font-weight: 300; font-size: 1.2rem; margin-bottom: 1rem; }
 .checkout__summary ul { list-style: none; display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 1rem; }

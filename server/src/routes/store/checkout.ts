@@ -5,7 +5,7 @@ import { query, execute } from '../../db/pool';
 import { computeCart, type CartItemInput } from '../../services/pricing';
 import { createOrder as ppCreateOrder, captureOrder as ppCaptureOrder, isPayPalConfigured } from '../../services/paypal';
 import { createDigitalGrants } from '../../services/delivery';
-import { sendEmail, escapeHtml } from '../../services/emailService';
+import { sendEmail, escapeHtml, renderEmail } from '../../services/emailService';
 
 // =============================================================================
 // Checkout. Prices are recomputed server-side (never trust the client). An order
@@ -23,6 +23,61 @@ function orderNumber(): string {
 function truncateIp(ip: string | undefined): string | null {
   if (!ip) return null;
   return ip.includes(':') ? ip.split(':').slice(0, 3).join(':') : ip.split('.').slice(0, 3).join('.') + '.0';
+}
+function money(cents: number, currency: string): string {
+  return `$${(cents / 100).toFixed(2)} ${currency}`;
+}
+function downloadLinks(tokens: string[]): string[] {
+  return tokens.map((t) => `${APP_URL()}/api/store/download/${t}`);
+}
+
+interface OrderLike {
+  email: string;
+  order_number: string;
+  total_cents: number;
+  currency: string;
+}
+function sendOrderEmail(order: OrderLike, downloads: string[]): void {
+  const free = order.total_cents === 0;
+  const bodyHtml = downloads.length
+    ? `<p style="margin:0 0 10px;color:#cfcfcf;font-size:15px;">Your download${downloads.length > 1 ? 's' : ''}:</p>
+       <ul style="margin:0;padding-left:18px;color:#cfcfcf;font-size:14px;">${downloads
+         .map((d) => `<li style="margin:5px 0;"><a href="${d}" style="color:#f4f4f4;">${escapeHtml(d)}</a></li>`)
+         .join('')}</ul>`
+    : '';
+  void sendEmail({
+    to: order.email,
+    subject: `Your order ${order.order_number}`,
+    html: renderEmail({
+      heading: free ? 'Your free download is ready' : 'Thanks for your order',
+      intro: free
+        ? `Order ${escapeHtml(order.order_number)} — free.`
+        : `Order ${escapeHtml(order.order_number)} — total ${money(order.total_cents, order.currency)}.`,
+      bodyHtml,
+      footerNote: 'Your download links are valid for a limited time.',
+    }),
+    text: `Order ${order.order_number}${free ? ' (free)' : ` — total ${money(order.total_cents, order.currency)}`}.\n${downloads.join('\n')}`,
+  }).catch(() => {});
+}
+
+// Light per-IP limit on free claims (they create orders + send email).
+const FREE_WINDOW_MS = 15 * 60 * 1000;
+const FREE_MAX = Number(process.env.FREE_CLAIM_RATE_LIMIT || 10);
+const freeHits = new Map<string, { count: number; start: number }>();
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, w] of freeHits) if (now - w.start > FREE_WINDOW_MS) freeHits.delete(k);
+}, FREE_WINDOW_MS).unref();
+function freeLimited(ip: string): boolean {
+  const now = Date.now();
+  const w = freeHits.get(ip);
+  if (!w || now - w.start > FREE_WINDOW_MS) {
+    freeHits.set(ip, { count: 1, start: now });
+    return false;
+  }
+  if (w.count >= FREE_MAX) return true;
+  w.count += 1;
+  return false;
 }
 
 // --- Create order ------------------------------------------------------------
@@ -42,6 +97,15 @@ router.post('/create-order', async (req: Request, res: Response): Promise<void> 
     totals = await computeCart(items);
   } catch (err) {
     res.status(400).json({ success: false, error: err instanceof Error ? err.message : 'Invalid cart.' });
+    return;
+  }
+
+  // PayPal can't process a $0 charge — fail clearly instead of a 502.
+  if (totals.totalCents <= 0) {
+    res.status(400).json({
+      success: false,
+      error: 'This order total is $0.00 — there is nothing to charge. (The item needs a price.)',
+    });
     return;
   }
 
@@ -187,22 +251,9 @@ router.post('/capture', async (req: Request, res: Response): Promise<void> => {
     await execute('UPDATE orders SET fulfillment_status = ? WHERE id = ?', ['unfulfilled', order.id]);
   }
 
-  // Issue digital download grants.
-  const tokens = await createDigitalGrants(order.id);
-  const downloads = tokens.map((t) => `${APP_URL()}/api/store/download/${t}`);
-
-  // Confirmation email (best-effort).
-  const linkHtml = downloads.map((d) => `<li><a href="${d}">${escapeHtml(d)}</a></li>`).join('');
-  void sendEmail({
-    to: order.email,
-    subject: `Your SonSoul order ${order.order_number}`,
-    html: `<div style="font-family:system-ui,sans-serif;background:#0a0a0a;color:#f4f4f4;padding:24px;border-radius:12px;max-width:560px;margin:auto">
-      <h2 style="font-weight:300">Thanks for your order</h2>
-      <p style="color:#cfcfcf">Order <b>${escapeHtml(order.order_number)}</b> — total $${(order.total_cents / 100).toFixed(2)} ${order.currency}.</p>
-      ${downloads.length ? `<p style="color:#cfcfcf">Your downloads (valid for a limited time):</p><ul>${linkHtml}</ul>` : ''}
-    </div>`,
-    text: `Order ${order.order_number} confirmed. Total $${(order.total_cents / 100).toFixed(2)}.\n${downloads.join('\n')}`,
-  }).catch(() => {});
+  // Issue digital download grants and send the confirmation (best-effort).
+  const downloads = downloadLinks(await createDigitalGrants(order.id));
+  sendOrderEmail(order as OrderLike, downloads);
 
   res.json({
     success: true,
@@ -210,6 +261,67 @@ router.post('/capture', async (req: Request, res: Response): Promise<void> => {
     status: 'paid',
     downloads,
   });
+});
+
+// --- Claim a free order ------------------------------------------------------
+// For carts whose recomputed total is $0 and contain no physical goods. There is
+// no PayPal round-trip: we validate, record a paid order, issue grants, and email
+// the links. Prices are always recomputed server-side, so a client cannot force a
+// paid item to $0 — the total must genuinely be zero from real product prices.
+router.post('/claim-free', async (req: Request, res: Response): Promise<void> => {
+  const ip = truncateIp(req.ip) || 'unknown';
+  if (freeLimited(ip)) {
+    res.status(429).json({ success: false, error: 'Too many free claims. Please try again in a little while.' });
+    return;
+  }
+
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  if (!EMAIL_RX.test(email)) {
+    res.status(400).json({ success: false, error: 'A valid email is required.' });
+    return;
+  }
+
+  const items = req.body?.items as CartItemInput[];
+  let totals;
+  try {
+    totals = await computeCart(items);
+  } catch (err) {
+    res.status(400).json({ success: false, error: err instanceof Error ? err.message : 'Invalid cart.' });
+    return;
+  }
+
+  if (totals.hasPhysical) {
+    res.status(400).json({ success: false, error: 'Physical items cannot be claimed for free.' });
+    return;
+  }
+  if (totals.totalCents !== 0) {
+    res.status(400).json({ success: false, error: 'This order is not free. Please check out normally.' });
+    return;
+  }
+
+  const num = orderNumber();
+  const result = await execute(
+    `INSERT INTO orders
+       (order_number, email, status, currency, subtotal_cents, shipping_cents, tax_cents, total_cents,
+        has_physical, has_digital, ip_truncated, paid_at)
+     VALUES (?, ?, 'paid', ?, 0, 0, 0, 0, 0, ?, ?, NOW())`,
+    [num, email, totals.currency, totals.hasDigital ? 1 : 0, truncateIp(req.ip)],
+  );
+  const orderId = result.insertId;
+
+  for (const line of totals.lines) {
+    await execute(
+      `INSERT INTO order_items
+         (order_id, product_id, variant_id, license_tier, title_snapshot, is_digital, unit_price_cents, quantity)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [orderId, line.productId, line.variantId, line.licenseTier, line.title, line.isDigital ? 1 : 0, line.unitCents, line.quantity],
+    );
+  }
+
+  const downloads = downloadLinks(await createDigitalGrants(orderId));
+  sendOrderEmail({ email, order_number: num, total_cents: 0, currency: totals.currency }, downloads);
+
+  res.status(201).json({ success: true, orderNumber: num, downloads });
 });
 
 export default router;

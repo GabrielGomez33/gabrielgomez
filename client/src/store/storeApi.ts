@@ -92,9 +92,12 @@ export const storeApi = {
     post<{ orderNumber: string; paypalOrderId: string; totalCents: number }>('/store/checkout/create-order', body),
   capture: (paypalOrderId: string) =>
     post<{ orderNumber: string; status: string; downloads?: string[] }>('/store/checkout/capture', { paypalOrderId }),
+  claimFree: (body: unknown) =>
+    post<{ orderNumber: string; downloads?: string[] }>('/store/checkout/claim-free', body),
 }
 
 export function formatPrice(cents: number, currency = 'USD'): string {
+  if (cents <= 0) return 'Free'
   return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(cents / 100)
 }
 export function formatSecs(s: number | null): string {
