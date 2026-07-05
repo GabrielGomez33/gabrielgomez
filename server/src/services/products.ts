@@ -42,6 +42,11 @@ export interface CreateProductInput {
   weightGrams?: number | null;
 }
 
+// Empty strings from form selects must become NULL — ENUM columns reject ''.
+function emptyToNull<T>(v: T): T | null {
+  return v === undefined || v === null || v === '' ? null : v
+}
+
 export function slugify(input: string): string {
   return input
     .toLowerCase()
@@ -209,9 +214,9 @@ export async function addTrack(productId: number, t: TrackInput): Promise<number
       productId,
       t.position ?? 0,
       t.name,
-      t.artist ?? null,
-      t.genre ?? null,
-      t.style ?? null,
+      emptyToNull(t.artist),
+      emptyToNull(t.genre),
+      emptyToNull(t.style),
       t.lengthSec ?? null,
       t.bpm ?? null,
       t.musicKey ?? null,
@@ -240,7 +245,7 @@ export async function setMusicMeta(productId: number, meta: MusicMetaInput): Pro
        genre = COALESCE(VALUES(genre), genre),
        style = COALESCE(VALUES(style), style),
        notes = COALESCE(VALUES(notes), notes)`,
-    [productId, meta.genre ?? null, meta.style ?? null, meta.notes ?? null],
+    [productId, emptyToNull(meta.genre), emptyToNull(meta.style), emptyToNull(meta.notes)],
   );
 }
 

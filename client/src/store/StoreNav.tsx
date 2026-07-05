@@ -1,5 +1,6 @@
 import { NavLink, Link } from 'react-router-dom'
 import { useCart } from './CartContext'
+import { useAccount } from './account/AccountContext'
 
 const TABS = [
   { to: '/store/music', label: 'Music' },
@@ -9,6 +10,7 @@ const TABS = [
 
 export function StoreNav() {
   const { count } = useCart()
+  const { customer } = useAccount()
   return (
     <header className="st__nav">
       <div className="st__nav-inner">
@@ -20,9 +22,14 @@ export function StoreNav() {
             </NavLink>
           ))}
         </nav>
-        <Link to="/store/cart" className="st__cart" aria-label={`Cart, ${count} items`}>
-          Cart{count > 0 && <span className="st__cart-badge">{count}</span>}
-        </Link>
+        <div className="st__nav-right">
+          <Link to={customer ? '/store/account' : '/store/account/login'} className="st__account">
+            {customer ? (customer.name || 'Account') : 'Sign in'}
+          </Link>
+          <Link to="/store/cart" className="st__cart" aria-label={`Cart, ${count} items`}>
+            Cart{count > 0 && <span className="st__cart-badge">{count}</span>}
+          </Link>
+        </div>
       </div>
     </header>
   )
