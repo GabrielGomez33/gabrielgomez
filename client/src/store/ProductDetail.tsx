@@ -44,6 +44,24 @@ export function ProductDetail() {
   }, [slug])
 
   const isMusic = product?.category === 'music'
+  const isSamplePack = product?.type === 'samplepack'
+  const previewTracks = useMemo(
+    () => product?.previewTracks ?? product?.tracks.filter((t) => t.is_preview && t.previewUrl) ?? [],
+    [product],
+  )
+  const sampleGroups = useMemo(() => {
+    const order = ['drums', 'bass', 'melodic', 'vocal', 'fx', 'other']
+    const map = new Map<string, PD['tracks']>()
+    for (const t of product?.tracks ?? []) {
+      const g = t.sample_group || 'other'
+      if (!map.has(g)) map.set(g, [])
+      map.get(g)!.push(t)
+    }
+    return [...map.entries()].sort((a, b) => {
+      const oa = order.indexOf(a[0]); const ob = order.indexOf(b[0])
+      return (oa < 0 ? 99 : oa) - (ob < 0 ? 99 : ob)
+    })
+  }, [product])
   const selectedVariant: Variant | undefined = useMemo(
     () => product?.variants.find((v) => v.id === variantId),
     [product, variantId],
@@ -134,7 +152,76 @@ export function ProductDetail() {
 
         {tab === 'overview' && (
           <div className="pdetail__panel">
-            {isMusic ? (
+            {isSamplePack ? (
+              <div className="samplepack">
+                {product.sampleSummary && (
+                  <p className="samplepack__summary">
+                    {product.sampleSummary.total} samples
+                    {product.sampleSummary.oneShots ? ` · ${product.sampleSummary.oneShots} one-shots` : ''}
+                    {product.sampleSummary.loops ? ` · ${product.sampleSummary.loops} loops` : ''}
+                    {product.sampleSummary.bpmMin
+                      ? ` · ${product.sampleSummary.bpmMin}${
+                          product.sampleSummary.bpmMax !== product.sampleSummary.bpmMin
+                            ? `–${product.sampleSummary.bpmMax}`
+                            : ''
+                        } BPM`
+                      : ''}
+                  </p>
+                )}
+
+                {previewTracks.length > 0 && (
+                  <div className="samplepack__previews">
+                    <h3 className="samplepack__h">Preview — {previewTracks.length} random samples</h3>
+                    <ul className="tracklist">
+                      {previewTracks.map((t) => (
+                        <li key={t.id} className="track">
+                          <div className="track__head">
+                            <span className="track__name">{t.name}</span>
+                            <span className="track__len">
+                              {[t.kind === 'one_shot' ? 'one-shot' : t.kind === 'loop' ? 'loop' : null,
+                                t.bpm ? `${t.bpm} BPM` : null,
+                                t.music_key,
+                              ].filter(Boolean).join(' · ')}
+                            </span>
+                          </div>
+                          <WaveformPlayer
+                            previewUrl={t.previewUrl}
+                            peaks={t.waveform_json}
+                            onNeedFreshUrl={async () => {
+                              const fresh = await load()
+                              const list = fresh?.previewTracks ?? fresh?.tracks ?? []
+                              return list.find((x) => x.id === t.id)?.previewUrl ?? null
+                            }}
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="samplepack__manifest">
+                  <h3 className="samplepack__h">What's inside</h3>
+                  {sampleGroups.map(([group, list]) => (
+                    <details key={group} className="samplepack__group" open>
+                      <summary>{group} <span>({list.length})</span></summary>
+                      <ul>
+                        {list.map((t) => (
+                          <li key={t.id}>
+                            <span className="samplepack__name">{t.name}</span>
+                            <span className="samplepack__tags">
+                              {[t.kind === 'one_shot' ? 'one-shot' : t.kind === 'loop' ? 'loop' : null,
+                                t.bpm ? `${t.bpm} BPM` : null,
+                                t.music_key,
+                              ].filter(Boolean).join(' · ')}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  ))}
+                </div>
+              </div>
+            ) : isMusic ? (
               product.tracks.length ? (
                 <ul className="tracklist">
                   {product.tracks.map((t) => (

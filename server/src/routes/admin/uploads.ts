@@ -4,8 +4,9 @@ import fs from 'fs';
 import path from 'path';
 import { requireAdmin } from '../../auth/middleware';
 import * as products from '../../services/products';
-import { probe, makeTaggedPreview, extractPeaks } from '../../services/media';
+import { probe, makeTaggedPreview, extractPeaks, resolveInStorage } from '../../services/media';
 import { processCover, SUPPORTED_COVER_EXT } from '../../services/images';
+import { analyzeAudio } from '../../services/audioAnalysis';
 import { productDir, ensureDir, safeName, relFromRoot } from '../../services/storage';
 
 // =============================================================================
@@ -28,6 +29,9 @@ router.param('id', (_req, res, next, value) => {
 });
 
 const AUDIO_EXT = new Set(['.wav', '.mp3', '.aiff', '.aif', '.flac', '.m4a', '.ogg']);
+const MAX_FILES = Number(process.env.MAX_UPLOAD_FILES || 300); // sample packs can be large
+const DSP_ENABLED = process.env.AUDIO_DSP !== 'off'; // aubio/keyfinder if present
+const PREVIEW_SET_SIZE = Number(process.env.PREVIEW_SET_SIZE || 10);
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -36,7 +40,7 @@ const upload = multer({
       ensureDir(dir);
       cb(null, dir);
     },
-    filename: (_req, file, cb) => cb(null, `${Date.now()}_${safeName(file.originalname)}`),
+    filename: (_req, file, cb) => cb(null, `${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${safeName(file.originalname)}`),
   }),
   limits: { fileSize: 400 * 1024 * 1024 }, // 400 MB/file (WAV stems can be big)
 });
@@ -51,8 +55,47 @@ function cleanup(files: Express.Multer.File[]): void {
   }
 }
 
+// Sanitize a browser-supplied relative folder path (from a folder upload) into a
+// safe, nested storage subpath — never allowing traversal outside masters/.
+function safeRelDir(raw: unknown): string {
+  if (typeof raw !== 'string' || !raw) return '';
+  const dir = raw.includes('/') ? raw.slice(0, raw.lastIndexOf('/')) : '';
+  return dir
+    .split('/')
+    .map((seg) => safeName(seg))
+    .filter((seg) => seg && seg !== '.' && seg !== '..')
+    .slice(0, 6) // cap nesting depth
+    .join('/');
+}
+
+// Build a 10s tagged preview + waveform peaks for one track from its master.
+// One-shots skip the producer tag (a tag would swamp a half-second sample).
+async function buildTrackPreview(
+  productId: number,
+  trackId: number,
+  masterAbs: string,
+  kind: string | null,
+): Promise<boolean> {
+  const previewsDir = path.join(productDir(productId), 'previews');
+  ensureDir(previewsDir);
+  const previewAbs = path.join(previewsDir, `${trackId}.mp3`);
+  try {
+    await makeTaggedPreview(masterAbs, previewAbs, kind === 'one_shot' ? { tagFile: '' } : {});
+    const peaks = await extractPeaks(previewAbs, 400);
+    await products.setTrackMedia(trackId, {
+      masterPath: relFromRoot(masterAbs),
+      previewPath: fs.existsSync(previewAbs) ? relFromRoot(previewAbs) : null,
+      waveform: peaks.length ? peaks : null,
+    });
+    return true;
+  } catch (err) {
+    console.error('[uploads] preview build failed:', err instanceof Error ? err.message : err);
+    return false;
+  }
+}
+
 // --- Audio: one or many files (folder upload = multiple) ---------------------
-router.post('/:id/audio', upload.array('files', 50), async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/audio', upload.array('files', MAX_FILES), async (req: Request, res: Response): Promise<void> => {
   const id = Number(req.params.id);
   const files = (req.files as Express.Multer.File[] | undefined) ?? [];
   const product = await products.getProductById(id);
@@ -71,16 +114,25 @@ router.post('/:id/audio', upload.array('files', 50), async (req: Request, res: R
     return;
   }
 
+  const isSamplePack = product.type === 'samplepack';
   const mastersDir = path.join(productDir(id), 'masters');
-  const previewsDir = path.join(productDir(id), 'previews');
   ensureDir(mastersDir);
-  ensureDir(previewsDir);
+
+  // Relative folder paths, aligned by index with the uploaded files (from a
+  // folder upload). Sent as a JSON array on the `relPaths` field.
+  let relPaths: string[] = [];
+  try {
+    if (typeof req.body.relPaths === 'string') relPaths = JSON.parse(req.body.relPaths);
+  } catch {
+    relPaths = [];
+  }
 
   const existing = await products.getTracks(id);
   let position = existing.length;
   const added: Array<Record<string, unknown>> = [];
 
-  for (const f of files) {
+  for (let idx = 0; idx < files.length; idx++) {
+    const f = files[idx];
     const ext = path.extname(f.originalname).toLowerCase();
     if (!AUDIO_EXT.has(ext)) {
       try {
@@ -91,7 +143,10 @@ router.post('/:id/audio', upload.array('files', 50), async (req: Request, res: R
       continue; // skip non-audio silently
     }
     position += 1;
-    const masterAbs = path.join(mastersDir, `${position}_${safeName(f.originalname)}`);
+    const relDir = safeRelDir(relPaths[idx]);
+    const destDir = relDir ? path.join(mastersDir, relDir) : mastersDir;
+    ensureDir(destDir);
+    const masterAbs = path.join(destDir, `${position}_${safeName(f.originalname)}`);
     fs.renameSync(f.path, masterAbs);
 
     // Technical info (ffprobe).
@@ -109,12 +164,28 @@ router.post('/:id/audio', upload.array('files', 50), async (req: Request, res: R
       console.error('[uploads] ffprobe failed:', err instanceof Error ? err.message : err);
     }
 
+    // Classify (filename + duration heuristics, refined by DSP when available).
+    const analysis = await analyzeAudio({
+      filename: f.originalname,
+      durationSec: meta.durationSec,
+      absFile: masterAbs,
+      useDsp: DSP_ENABLED,
+    });
+
     const trackId = await products.addTrack(id, {
       name: path.parse(f.originalname).name,
       position,
       genre: (req.body.genre as string) ?? null,
       style: (req.body.style as products.MusicStyle) ?? null,
       lengthSec: meta.durationSec,
+      bpm: analysis.bpm,
+      musicKey: analysis.key,
+      kind: analysis.kind,
+      sampleGroup: analysis.group,
+      sampleCategory: analysis.category,
+      relDir: relDir || null,
+      bpmSource: analysis.bpmSource,
+      keySource: analysis.keySource,
       fileSizeBytes: meta.sizeBytes,
       format: meta.format,
       bitrateKbps: meta.bitrateKbps,
@@ -123,26 +194,126 @@ router.post('/:id/audio', upload.array('files', 50), async (req: Request, res: R
       originalFilename: f.originalname,
     });
 
-    // Preview + waveform (best effort — a failure here doesn't lose the master).
-    const previewAbs = path.join(previewsDir, `${trackId}.mp3`);
-    let peaks: number[] = [];
-    try {
-      await makeTaggedPreview(masterAbs, previewAbs);
-      peaks = await extractPeaks(previewAbs, 400);
-    } catch (err) {
-      console.error('[uploads] preview/peaks failed:', err instanceof Error ? err.message : err);
+    // Sample packs defer previews to the curated preview set (only ~10 of ~100
+    // get one). Singles/albums/beatpacks preview every track, as before.
+    if (!isSamplePack) {
+      await buildTrackPreview(id, trackId, masterAbs, analysis.kind);
+    } else {
+      await products.setTrackMedia(trackId, { masterPath: relFromRoot(masterAbs), previewPath: null, waveform: null });
     }
-    await products.setTrackMedia(trackId, {
-      masterPath: relFromRoot(masterAbs),
-      previewPath: fs.existsSync(previewAbs) ? relFromRoot(previewAbs) : null,
-      waveform: peaks.length ? peaks : null,
-    });
 
-    added.push({ trackId, name: path.parse(f.originalname).name, position, ...meta });
+    added.push({
+      trackId,
+      name: path.parse(f.originalname).name,
+      position,
+      kind: analysis.kind,
+      group: analysis.group,
+      category: analysis.category,
+      bpm: analysis.bpm,
+      key: analysis.key,
+      ...meta,
+    });
   }
 
   await products.recomputeMusicAggregates(id);
-  res.status(201).json({ success: true, added, musicMeta: await products.getMusicMeta(id) });
+
+  // For a sample pack, auto-seed the preview set on the first upload so there's
+  // always something to audition — the admin can re-roll or fine-tune after.
+  if (isSamplePack && (await products.getPreviewCount(id)) === 0) {
+    await autoPickPreviewSet(id, PREVIEW_SET_SIZE);
+  }
+
+  res.status(201).json({
+    success: true,
+    added,
+    isSamplePack,
+    previewCount: await products.getPreviewCount(id),
+    musicMeta: await products.getMusicMeta(id),
+  });
+});
+
+// Regenerate the preview set: clear the old one, pick a fresh diversified set,
+// and build previews for the chosen samples. Returns the chosen track ids.
+async function autoPickPreviewSet(productId: number, count: number): Promise<number[]> {
+  const previous = await products.clearPreviewSet(productId);
+  for (const p of previous) {
+    if (p.preview_path) {
+      try {
+        fs.unlinkSync(resolveInStorage(p.preview_path));
+      } catch {
+        /* best effort */
+      }
+    }
+  }
+  const seed = previous.length + 1; // rotate selection each time it's re-picked
+  const ids = await products.pickPreviewTrackIds(productId, count, seed);
+  for (const trackId of ids) {
+    const track = await products.getTrackById(trackId);
+    if (!track?.master_path) continue;
+    let masterAbs: string;
+    try {
+      masterAbs = resolveInStorage(track.master_path);
+    } catch {
+      continue;
+    }
+    const ok = await buildTrackPreview(productId, trackId, masterAbs, track.kind);
+    if (ok) await products.setTrackPreview(trackId, true);
+  }
+  return ids;
+}
+
+// --- Preview set: auto-pick ~10 diversified samples --------------------------
+router.post('/:id/preview-set/auto', async (req: Request, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  const product = await products.getProductById(id);
+  if (!product || product.category !== 'music') {
+    res.status(404).json({ success: false, error: 'Music product not found.' });
+    return;
+  }
+  const count = Math.min(Math.max(Number(req.body?.count) || PREVIEW_SET_SIZE, 1), 30);
+  const ids = await autoPickPreviewSet(id, count);
+  res.json({ success: true, chosen: ids, previewCount: await products.getPreviewCount(id) });
+});
+
+// --- Preview set: toggle a single sample -------------------------------------
+router.post('/:id/tracks/:trackId/preview', async (req: Request, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  const trackId = Number(req.params.trackId);
+  const on = Boolean(req.body?.on);
+  const track = await products.getTrackById(trackId);
+  if (!track || track.product_id !== id) {
+    res.status(404).json({ success: false, error: 'Track not found.' });
+    return;
+  }
+  if (on) {
+    if (!track.master_path) {
+      res.status(400).json({ success: false, error: 'This sample has no master file.' });
+      return;
+    }
+    let masterAbs: string;
+    try {
+      masterAbs = resolveInStorage(track.master_path);
+    } catch {
+      res.status(400).json({ success: false, error: 'Sample file is unavailable.' });
+      return;
+    }
+    const ok = await buildTrackPreview(id, trackId, masterAbs, track.kind);
+    if (!ok) {
+      res.status(500).json({ success: false, error: 'Could not build the preview.' });
+      return;
+    }
+    await products.setTrackPreview(trackId, true);
+  } else {
+    if (track.preview_path) {
+      try {
+        fs.unlinkSync(resolveInStorage(track.preview_path));
+      } catch {
+        /* best effort */
+      }
+    }
+    await products.setTrackPreview(trackId, false);
+  }
+  res.json({ success: true, previewCount: await products.getPreviewCount(id) });
 });
 
 // --- Cover image -------------------------------------------------------------

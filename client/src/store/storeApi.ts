@@ -65,10 +65,24 @@ export interface Track {
   style: string | null
   length_sec: number | null
   bpm: number | null
+  music_key: string | null
+  kind: 'one_shot' | 'loop' | 'unknown' | null
+  sample_group: string | null
+  sample_category: string | null
+  is_preview?: number
   format: string | null
   bitrate_kbps: number | null
   waveform_json: number[] | null
   previewUrl: string | null
+}
+
+export interface SampleSummary {
+  total: number
+  oneShots: number
+  loops: number
+  byGroup: Record<string, number>
+  bpmMin: number | null
+  bpmMax: number | null
 }
 
 export interface Variant {
@@ -86,6 +100,8 @@ export interface ProductDetail extends ProductSummary {
   variants: Variant[]
   licenseTiers: Array<{ tier: string; price_cents: number }>
   musicMeta: Record<string, unknown> | null
+  previewTracks?: Track[]
+  sampleSummary?: SampleSummary
 }
 
 export interface StoreConfig {

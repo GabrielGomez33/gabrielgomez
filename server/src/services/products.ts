@@ -205,13 +205,22 @@ export interface TrackInput {
   sampleRate?: number | null;
   channels?: number | null;
   originalFilename?: string | null;
+  // Folder-analysis classification (sample packs + enriched beatpacks/albums).
+  kind?: 'one_shot' | 'loop' | 'unknown' | null;
+  sampleGroup?: string | null;
+  sampleCategory?: string | null;
+  isPreview?: boolean;
+  relDir?: string | null;
+  bpmSource?: string | null;
+  keySource?: string | null;
 }
 export async function addTrack(productId: number, t: TrackInput): Promise<number> {
   const result = await execute(
     `INSERT INTO music_tracks
        (product_id, position, name, artist, genre, style, length_sec, bpm, music_key,
-        file_size_bytes, format, bitrate_kbps, sample_rate, channels, original_filename)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        file_size_bytes, format, bitrate_kbps, sample_rate, channels, original_filename,
+        kind, sample_group, sample_category, is_preview, rel_dir, bpm_source, key_source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       productId,
       t.position ?? 0,
@@ -228,10 +237,91 @@ export async function addTrack(productId: number, t: TrackInput): Promise<number
       t.sampleRate ?? null,
       t.channels ?? null,
       t.originalFilename ?? null,
+      emptyToNull(t.kind),
+      emptyToNull(t.sampleGroup),
+      emptyToNull(t.sampleCategory),
+      t.isPreview ? 1 : 0,
+      emptyToNull(t.relDir),
+      emptyToNull(t.bpmSource),
+      emptyToNull(t.keySource),
     ],
   );
   await recomputeMusicAggregates(productId);
   return result.insertId;
+}
+
+// --- Sample-pack helpers ----------------------------------------------------
+/**
+ * Mark/unmark a track as part of the public preview set. Turning a sample OFF
+ * also clears its preview media, so a de-selected sample is never auditionable
+ * (the invariant: for sample packs, preview_path is set iff is_preview = 1).
+ */
+export async function setTrackPreview(trackId: number, on: boolean): Promise<void> {
+  if (on) {
+    await execute('UPDATE music_tracks SET is_preview = 1 WHERE id = ?', [trackId]);
+  } else {
+    await execute(
+      'UPDATE music_tracks SET is_preview = 0, preview_path = NULL, waveform_json = NULL WHERE id = ?',
+      [trackId],
+    );
+  }
+}
+
+/** Clear the whole preview set (returns the previous rows so files can be cleaned up). */
+export async function clearPreviewSet(productId: number): Promise<TrackRow[]> {
+  const previous = await query<TrackRow[]>(
+    'SELECT * FROM music_tracks WHERE product_id = ? AND is_preview = 1',
+    [productId],
+  );
+  await execute(
+    'UPDATE music_tracks SET is_preview = 0, preview_path = NULL, waveform_json = NULL WHERE product_id = ? AND is_preview = 1',
+    [productId],
+  );
+  return previous;
+}
+
+/**
+ * Choose `count` tracks for the preview set, spread across sample groups so the
+ * preview is representative rather than (say) ten kicks. Deterministic order,
+ * shuffled within a group by a rotating offset so it isn't always the same ten.
+ */
+export async function pickPreviewTrackIds(productId: number, count: number, seed: number): Promise<number[]> {
+  const rows = await query<TrackRow[]>(
+    'SELECT id, sample_group FROM music_tracks WHERE product_id = ? ORDER BY id',
+    [productId],
+  );
+  if (rows.length === 0) return [];
+  // Bucket by group.
+  const buckets = new Map<string, number[]>();
+  for (const r of rows) {
+    const g = r.sample_group || 'other';
+    if (!buckets.has(g)) buckets.set(g, []);
+    buckets.get(g)!.push(r.id);
+  }
+  // Rotate each bucket by the seed so repeated picks vary.
+  for (const ids of buckets.values()) {
+    const off = seed % ids.length;
+    ids.push(...ids.splice(0, off));
+  }
+  // Round-robin across groups until we have `count`.
+  const groups = [...buckets.values()];
+  const chosen: number[] = [];
+  let i = 0;
+  while (chosen.length < Math.min(count, rows.length)) {
+    const g = groups[i % groups.length];
+    if (g.length) chosen.push(g.shift()!);
+    i++;
+    if (groups.every((x) => x.length === 0)) break;
+  }
+  return chosen;
+}
+
+export async function getPreviewCount(productId: number): Promise<number> {
+  const rows = await query<RowDataPacket[]>(
+    'SELECT COUNT(*) AS n FROM music_tracks WHERE product_id = ? AND is_preview = 1',
+    [productId],
+  );
+  return Number(rows[0]?.n) || 0;
 }
 
 // --- Product-level music metadata ------------------------------------------
@@ -290,6 +380,11 @@ export async function getMusicMetaForProducts(
 export interface TrackRow extends RowDataPacket {
   id: number;
   product_id: number;
+  name: string;
+  kind: string | null;
+  sample_group: string | null;
+  sample_category: string | null;
+  is_preview: number;
   preview_path: string | null;
   master_path: string | null;
   length_sec: number | null;

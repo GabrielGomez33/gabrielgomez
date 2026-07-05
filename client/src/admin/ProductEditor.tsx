@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { adminApi, type Product, type AttrOption, type Variant } from './adminApi'
 
 const TYPES: Record<string, string[]> = {
-  music: ['beatpack', 'single', 'album'],
+  music: ['beatpack', 'single', 'album', 'samplepack'],
   clothing: ['shirt', 'pants', 'socks'],
   accessory: ['accessory', 'hat', 'bag', 'other'],
 }
@@ -119,8 +119,13 @@ export function ProductEditor() {
     setError('')
     setMsg('')
     try {
-      await adminApi.uploadAudio(Number(id), Array.from(files), { genre, style })
-      setMsg('Audio uploaded — previews + waveforms generated.')
+      const r = await adminApi.uploadAudio(Number(id), Array.from(files), { genre, style })
+      const n = r.added?.length ?? 0
+      setMsg(
+        r.isSamplePack
+          ? `${n} sample${n === 1 ? '' : 's'} added, analyzed & sorted. Preview set: ${r.previewCount ?? 0}.`
+          : 'Audio uploaded — previews + waveforms generated.',
+      )
       await loadProduct().catch(() => {})
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed.')
@@ -165,6 +170,7 @@ export function ProductEditor() {
   }
 
   const isMusic = category === 'music'
+  const isSamplePack = isMusic && type === 'samplepack'
 
   // All metadata fields are mandatory. Music additionally needs genre/style/notes.
   const basicComplete = Boolean(
@@ -177,10 +183,12 @@ export function ProductEditor() {
   // Publishing additionally requires a cover and real content.
   const hasCover = Boolean(product?.cover_image_path)
   const hasContent = isMusic ? Boolean(product?.tracks?.length) : Boolean(product?.variants?.length)
+  const hasPreviewSample = Boolean(product?.tracks?.some((t) => t.is_preview))
   const publishMissing: string[] = []
   if (!basicComplete) publishMissing.push('all fields filled in')
   if (!hasCover) publishMissing.push('a cover image')
-  if (!hasContent) publishMissing.push(isMusic ? 'at least one track' : 'at least one variant')
+  if (!hasContent) publishMissing.push(isSamplePack ? 'at least one sample' : isMusic ? 'at least one track' : 'at least one variant')
+  if (isSamplePack && hasContent && !hasPreviewSample) publishMissing.push('a preview set (Auto-pick previews)')
   const canPublish = publishMissing.length === 0
 
   return (
@@ -304,6 +312,12 @@ export function ProductEditor() {
             <>
               <section className="adm-section">
                 <h3>Audio — upload files or a whole folder</h3>
+                {isSamplePack && (
+                  <p className="adm-muted">
+                    Drop the whole sample folder — every file is analyzed and sorted automatically
+                    (one-shot vs loop, group, BPM &amp; key). Folder structure is preserved in the download.
+                  </p>
+                )}
                 <div className="adm-uploads">
                   <label className="adm-drop">
                     <span>Select files</span>
@@ -314,34 +328,43 @@ export function ProductEditor() {
                     <input ref={folderRef} type="file" multiple onChange={(e) => handleAudio(e.target.files)} />
                   </label>
                 </div>
-                {busy && <p className="adm-muted">Processing (ffprobe + preview + waveform)…</p>}
-              </section>
-
-              <section className="adm-section">
-                <h3>Tracks ({product.tracks?.length ?? 0})</h3>
-                {product.tracks && product.tracks.length > 0 ? (
-                  <table className="adm-table">
-                    <thead>
-                      <tr><th>#</th><th>Name</th><th>Length</th><th>Format</th><th>Bitrate</th><th>Size</th><th>Preview</th></tr>
-                    </thead>
-                    <tbody>
-                      {product.tracks.map((t) => (
-                        <tr key={t.id}>
-                          <td>{t.position}</td>
-                          <td>{t.name}</td>
-                          <td>{fmtSecs(t.length_sec)}</td>
-                          <td>{t.format ?? '—'}</td>
-                          <td>{t.bitrate_kbps ? `${t.bitrate_kbps}k` : '—'}</td>
-                          <td>{fmtBytes(t.file_size_bytes)}</td>
-                          <td>{t.preview_path ? '✓' : '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <p className="adm-muted">No tracks yet.</p>
+                {busy && (
+                  <p className="adm-muted">
+                    Processing (ffprobe + analysis{isSamplePack ? '' : ' + preview + waveform'})… large folders take a moment.
+                  </p>
                 )}
               </section>
+
+              {isSamplePack ? (
+                <SamplePackEditor product={product} onDone={loadProduct} setMsg={setMsg} setError={setError} />
+              ) : (
+                <section className="adm-section">
+                  <h3>Tracks ({product.tracks?.length ?? 0})</h3>
+                  {product.tracks && product.tracks.length > 0 ? (
+                    <table className="adm-table">
+                      <thead>
+                        <tr><th>#</th><th>Name</th><th>Length</th><th>BPM</th><th>Key</th><th>Format</th><th>Size</th><th>Preview</th></tr>
+                      </thead>
+                      <tbody>
+                        {product.tracks.map((t) => (
+                          <tr key={t.id}>
+                            <td>{t.position}</td>
+                            <td>{t.name}</td>
+                            <td>{fmtSecs(t.length_sec)}</td>
+                            <td>{t.bpm ?? '—'}</td>
+                            <td>{t.music_key ?? '—'}</td>
+                            <td>{t.format ?? '—'}</td>
+                            <td>{fmtBytes(t.file_size_bytes)}</td>
+                            <td>{t.preview_path ? '✓' : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <p className="adm-muted">No tracks yet.</p>
+                  )}
+                </section>
+              )}
 
               <TierEditor productId={product.id} tiers={product.licenseTiers ?? []} onDone={loadProduct} />
             </>
@@ -377,6 +400,123 @@ export function ProductEditor() {
         </>
       )}
     </div>
+  )
+}
+
+const GROUP_ORDER = ['drums', 'bass', 'melodic', 'vocal', 'fx', 'other']
+
+function SamplePackEditor({
+  product,
+  onDone,
+  setMsg,
+  setError,
+}: {
+  product: Product
+  onDone: () => Promise<void>
+  setMsg: (s: string) => void
+  setError: (s: string) => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const tracks = product.tracks ?? []
+  const previewCount = tracks.filter((t) => t.is_preview).length
+
+  // Group samples for display, in a sensible group order.
+  const groups = useMemo(() => {
+    const map = new Map<string, typeof tracks>()
+    for (const t of tracks) {
+      const g = t.sample_group || 'other'
+      if (!map.has(g)) map.set(g, [])
+      map.get(g)!.push(t)
+    }
+    const ord = (g: string) => {
+      const i = GROUP_ORDER.indexOf(g)
+      return i < 0 ? 99 : i
+    }
+    return [...map.entries()].sort((a, b) => ord(a[0]) - ord(b[0]))
+  }, [tracks])
+
+  async function autoPick() {
+    setBusy(true)
+    setError('')
+    try {
+      const r = await adminApi.autoPreviewSet(product.id, 10)
+      setMsg(`Preview set ready — ${r.previewCount} samples selected.`)
+      await onDone()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not build preview set.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function toggle(trackId: number, on: boolean) {
+    setBusy(true)
+    setError('')
+    try {
+      await adminApi.toggleTrackPreview(product.id, trackId, on)
+      await onDone()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not update preview.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (tracks.length === 0) {
+    return (
+      <section className="adm-section">
+        <h3>Samples</h3>
+        <p className="adm-muted">No samples yet — upload a folder above.</p>
+      </section>
+    )
+  }
+
+  return (
+    <section className="adm-section">
+      <div className="adm-list__head">
+        <h3>Samples ({tracks.length})</h3>
+        <button className="adm-btn" onClick={autoPick} disabled={busy}>
+          {busy ? 'Working…' : 'Auto-pick 10 previews'}
+        </button>
+      </div>
+      <p className={previewCount ? 'adm-ok' : 'adm-muted'}>
+        {previewCount
+          ? `${previewCount} sample${previewCount === 1 ? '' : 's'} in the public preview set. Star a row to add/remove.`
+          : 'No preview samples yet — auto-pick, or star individual rows. At least one is required to publish.'}
+      </p>
+      {groups.map(([group, list]) => (
+        <div key={group} className="adm-samplegroup">
+          <h4 className="adm-samplegroup__title">{group} <span>({list.length})</span></h4>
+          <table className="adm-table adm-table--samples">
+            <thead>
+              <tr><th>★</th><th>Name</th><th>Kind</th><th>Category</th><th>BPM</th><th>Key</th><th>Length</th></tr>
+            </thead>
+            <tbody>
+              {list.map((t) => (
+                <tr key={t.id} className={t.is_preview ? 'is-preview' : ''}>
+                  <td>
+                    <button
+                      className={`adm-star ${t.is_preview ? 'is-on' : ''}`}
+                      title={t.is_preview ? 'In preview set — click to remove' : 'Add to preview set'}
+                      onClick={() => toggle(t.id, !t.is_preview)}
+                      disabled={busy}
+                    >
+                      {t.is_preview ? '★' : '☆'}
+                    </button>
+                  </td>
+                  <td>{t.name}</td>
+                  <td>{t.kind === 'one_shot' ? 'one-shot' : t.kind === 'loop' ? 'loop' : '—'}</td>
+                  <td>{t.sample_category ?? '—'}</td>
+                  <td>{t.bpm ?? '—'}</td>
+                  <td>{t.music_key ?? '—'}</td>
+                  <td>{fmtSecs(t.length_sec)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+    </section>
   )
 }
 
