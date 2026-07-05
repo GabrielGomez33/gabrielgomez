@@ -11,6 +11,8 @@
   z-index: 20;
   transition: background 400ms var(--ease), border-color 400ms var(--ease);
   border-bottom: 1px solid transparent;
+  /* Sit below the iOS notch / status bar in standalone PWA mode. */
+  padding-top: env(safe-area-inset-top, 0px);
 }
 .nav--scrolled {
   background: rgba(10, 10, 10, 0.72);
