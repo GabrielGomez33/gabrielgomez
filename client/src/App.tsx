@@ -3,6 +3,8 @@ import { Routes, Route } from 'react-router-dom'
 import Portfolio from './pages/Portfolio'
 import AdminApp from './admin/AdminApp'
 import StoreApp from './store/StoreApp'
+import { VerifyEmail } from './store/account/VerifyEmail'
+import { ResetPassword } from './store/account/ResetPassword'
 
 export default function App() {
   return (
@@ -10,6 +12,9 @@ export default function App() {
       <Route path="/" element={<Portfolio />} />
       <Route path="/store/*" element={<StoreApp />} />
       <Route path="/admin/*" element={<AdminApp />} />
+      {/* Reached from account emails (APP_URL/verify-email, /reset-password). */}
+      <Route path="/verify-email" element={<VerifyEmail />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
     </Routes>
   )
 }

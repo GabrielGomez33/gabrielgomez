@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { storeApi, formatPrice, type StoreConfig } from './storeApi'
 import { useCart } from './CartContext'
+import { useAccount } from './account/AccountContext'
 
 // PayPal SDK is injected at runtime; we only touch the minimal surface we use.
 interface PayPalButtons {
@@ -41,12 +42,13 @@ function loadSdk(clientId: string, currency: string): Promise<void> {
 export function Checkout() {
   const cart = useCart()
   const navigate = useNavigate()
+  const { customer } = useAccount()
   const [config, setConfig] = useState<StoreConfig | null>(null)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState<{ orderNumber: string; downloads?: string[] } | null>(null)
 
   const hasPhysical = cart.items.some((i) => !i.isDigital)
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(customer?.email ?? '')
   const [ship, setShip] = useState({ name: '', line1: '', city: '', region: '', postal: '', country: '' })
 
   // Refs so the PayPal callbacks (rendered once) always read the latest values.

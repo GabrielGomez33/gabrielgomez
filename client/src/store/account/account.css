@@ -1,0 +1,55 @@
+/* Customer account — B&W, centered cards + dashboard, on the store tokens. */
+.acc-wrap { display: grid; place-items: center; padding: clamp(1.5rem, 6vw, 4rem) 1rem; }
+.acc-wrap--standalone {
+  min-height: 100svh; background: var(--bg); color: var(--fg); position: relative; z-index: 2;
+}
+.acc-card {
+  width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 1rem;
+  border: 1px solid var(--line); border-radius: 14px; padding: 2rem;
+}
+.acc-title { font-family: var(--font-display); font-weight: 200; letter-spacing: 0.06em; font-size: 1.6rem; }
+.acc-sub { color: var(--mist); font-size: 0.9rem; }
+.acc-field { display: flex; flex-direction: column; gap: 0.4rem; }
+.acc-field > span { font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ash); }
+.acc-optional { color: var(--smoke); text-transform: none; letter-spacing: 0; }
+.acc-field input {
+  background: transparent; border: 1px solid var(--line-strong); color: var(--fg);
+  font-family: var(--font-body); font-size: 0.95rem; padding: 0.7rem 0.8rem; border-radius: 6px;
+}
+.acc-field input:focus { outline: none; border-color: var(--white); }
+.acc-check { display: flex; align-items: center; gap: 0.6rem; color: var(--mist); font-size: 0.85rem; }
+.acc-check input { width: 16px; height: 16px; accent-color: var(--white); }
+.acc-hint { color: var(--fog); font-size: 0.78rem; }
+.acc-error { color: #ff8b8b; font-size: 0.85rem; border-left: 2px solid #ff8b8b; padding-left: 0.7rem; }
+.acc-submit { width: 100%; margin-top: 0.3rem; }
+.acc-links { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-top: 0.4rem; }
+.acc-links a { font-family: var(--font-mono); font-size: 0.72rem; color: var(--fog); }
+.acc-links a:hover { color: var(--white); }
+.acc-inline-link { color: var(--white); text-decoration: underline; text-underline-offset: 3px; }
+
+/* dashboard */
+.acc-dash { max-width: 820px; margin: 0 auto; }
+.acc-dash__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 2rem; }
+.acc-dash__title { font-family: var(--font-display); font-weight: 200; font-size: clamp(1.8rem, 5vw, 2.6rem); }
+.acc-dash__email { color: var(--mist); margin-top: 0.4rem; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.acc-section { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
+.acc-section h2 { font-family: var(--font-display); font-weight: 300; font-size: 1.3rem; margin-bottom: 1rem; }
+
+.acc-badge { font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.12em; text-transform: uppercase; padding: 0.15rem 0.45rem; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--fog); }
+.acc-badge--warn { color: #ffcf8b; border-color: #ffcf8b; }
+.acc-badge--paid, .acc-badge--fulfilled { color: var(--black); background: var(--white); border-color: var(--white); }
+.acc-badge--refunded, .acc-badge--cancelled { color: var(--ash); }
+
+.acc-downloads { list-style: none; display: flex; flex-direction: column; gap: 0.8rem; }
+.acc-downloads li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid var(--line); border-radius: 10px; padding: 0.9rem 1.1rem; }
+.acc-dl__title { display: block; font-family: var(--font-display); font-weight: 300; }
+.acc-dl__meta { display: block; font-family: var(--font-mono); font-size: 0.68rem; color: var(--ash); margin-top: 0.25rem; }
+.acc-dl__spent { font-family: var(--font-mono); font-size: 0.7rem; color: var(--ash); }
+
+.acc-orders { list-style: none; display: flex; flex-direction: column; gap: 1rem; }
+.acc-order { border: 1px solid var(--line); border-radius: 10px; padding: 1rem 1.1rem; }
+.acc-order__head { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; }
+.acc-order__num { font-family: var(--font-mono); font-size: 0.8rem; }
+.acc-order__date { color: var(--ash); font-size: 0.78rem; }
+.acc-order__total { margin-left: auto; font-family: var(--font-mono); }
+.acc-order__items { list-style: none; margin-top: 0.6rem; color: var(--mist); font-size: 0.86rem; display: flex; flex-direction: column; gap: 0.2rem; }

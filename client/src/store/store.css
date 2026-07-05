@@ -34,6 +34,9 @@
 }
 .st__tab:hover { color: var(--white); }
 .st__tab.is-active { color: var(--white); border-bottom-color: var(--white); }
+.st__nav-right { display: flex; align-items: center; gap: clamp(0.8rem, 2vw, 1.5rem); }
+.st__account { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fog); max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st__account:hover { color: var(--white); }
 .st__cart { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; position: relative; }
 .st__cart-badge {
   display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 0.4rem; padding: 0 5px;
