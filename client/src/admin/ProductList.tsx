@@ -30,6 +30,7 @@ export function ProductList() {
         <table className="adm-table">
           <thead>
             <tr>
+              <th></th>
               <th>Title</th>
               <th>Category</th>
               <th>Type</th>
@@ -41,12 +42,21 @@ export function ProductList() {
           <tbody>
             {products.map((p) => (
               <tr key={p.id}>
+                <td className="adm-thumb-cell">
+                  {p.coverThumbUrl ? (
+                    <img className="adm-thumb" src={p.coverThumbUrl} alt="" loading="lazy" />
+                  ) : (
+                    <span className="adm-thumb adm-thumb--empty" aria-hidden>
+                      {p.category === 'music' ? '♪' : '◻'}
+                    </span>
+                  )}
+                </td>
                 <td>
                   <Link to={`/admin/${p.id}`}>{p.title}</Link>
                 </td>
                 <td>{p.category}</td>
                 <td>{p.type}</td>
-                <td>${(p.price_cents / 100).toFixed(2)}</td>
+                <td>{p.price_cents > 0 ? `$${(p.price_cents / 100).toFixed(2)}` : 'Free'}</td>
                 <td>
                   <span className={`adm-badge adm-badge--${p.status}`}>{p.status}</span>
                 </td>

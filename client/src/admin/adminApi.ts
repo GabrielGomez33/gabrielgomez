@@ -43,6 +43,9 @@ export interface Product {
   status: 'draft' | 'published' | 'archived'
   is_digital: number
   cover_image_path: string | null
+  cover_thumb_path?: string | null
+  coverUrl?: string | null
+  coverThumbUrl?: string | null
   paypal_product_id: string | null
   tracks?: Track[]
   variants?: Variant[]

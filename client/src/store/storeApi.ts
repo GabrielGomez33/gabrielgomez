@@ -50,6 +50,10 @@ export interface ProductSummary {
   currency: string
   is_digital: number
   coverUrl: string | null
+  coverThumbUrl?: string | null
+  genre?: string | null
+  style?: string | null
+  trackCount?: number
 }
 
 export interface Track {

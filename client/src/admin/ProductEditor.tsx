@@ -278,8 +278,25 @@ export function ProductEditor() {
           {/* Cover */}
           <section className="adm-section">
             <h3>Cover image</h3>
-            <input type="file" accept="image/*" onChange={(e) => handleCover(e.target.files?.[0])} />
-            {product.cover_image_path && <p className="adm-muted">Current: {product.cover_image_path}</p>}
+            <div className="adm-cover">
+              {product.coverThumbUrl ? (
+                <img className="adm-cover__preview" src={product.coverThumbUrl} alt="Current cover" />
+              ) : (
+                <div className="adm-cover__preview adm-cover__preview--empty" aria-hidden>
+                  {isMusic ? '♪' : '◻'}
+                </div>
+              )}
+              <div className="adm-cover__actions">
+                <input
+                  type="file"
+                  accept="image/*,.heic,.heif"
+                  onChange={(e) => handleCover(e.target.files?.[0])}
+                />
+                <p className="adm-muted">
+                  JPEG, PNG, WebP, GIF, or HEIC (iPhone). We convert &amp; resize automatically.
+                </p>
+              </div>
+            </div>
           </section>
 
           {/* Music: audio upload + tracks + tiers */}

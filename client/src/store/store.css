@@ -176,3 +176,85 @@
 .checkout__downloads { width: 100%; border: 1px solid var(--line); border-radius: 12px; padding: 1.2rem; }
 .checkout__downloads ul { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.6rem; }
 .checkout__downloads a { color: var(--white); text-decoration: underline; text-underline-offset: 3px; }
+
+/* =========================================================================
+   Filing-cabinet music browser
+   ========================================================================= */
+.cab { max-width: var(--maxw); margin: 0 auto; padding: clamp(1.4rem, 4vw, 3rem) clamp(1rem, 4vw, 3rem) 5rem; }
+.cab__head { margin-bottom: 2rem; }
+.cab__facets { display: flex; align-items: center; gap: 0.5rem; margin-top: 1.4rem; flex-wrap: wrap; }
+.cab__facets-label { font-family: var(--font-mono); font-size: 0.64rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ash); margin-right: 0.4rem; }
+.cab__facet {
+  font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--fog); background: none; border: 1px solid var(--line); border-radius: 999px;
+  padding: 0.34rem 0.9rem; cursor: pointer; transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.cab__facet:hover { color: var(--white); border-color: var(--line-strong); }
+.cab__facet.is-active { color: var(--black); background: var(--white); border-color: var(--white); }
+
+/* The stack of folders */
+.cab__stack { display: flex; flex-direction: column; }
+.cab__group { display: flex; flex-direction: column; }
+
+/* Black divider tab that sections the cabinet by the active facet */
+.cab__divider { padding: 1.1rem 0 0.1rem; }
+.cab__divider-tab {
+  display: inline-flex; align-items: center; gap: 1.2rem; min-width: 210px;
+  background: var(--white); color: var(--black);
+  border-radius: 8px 8px 0 0; padding: 0.5rem 1rem 0.55rem; margin-left: clamp(0.5rem, 4vw, 3.5rem);
+  box-shadow: 0 -1px 0 var(--line-strong);
+}
+.cab__divider-label { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.22em; text-transform: uppercase; font-weight: 600; }
+.cab__divider-count { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.12em; margin-left: auto; opacity: 0.55; }
+
+/* A folder: a hairline "lip" + a clickable tab; opens into a panel */
+.cab__folder { border-top: 1px solid var(--line); position: relative; }
+.cab__folder:first-of-type { border-top: none; }
+.cab__tab {
+  width: 100%; display: flex; align-items: center; gap: 1rem; text-align: left; cursor: pointer;
+  background: linear-gradient(180deg, rgba(244,244,244,0.035), transparent);
+  border: none; border-radius: 0 0 10px 10px;
+  padding: 0.85rem clamp(0.8rem, 3vw, 1.6rem);
+  color: var(--mist); transition: background 0.16s, transform 0.16s, color 0.16s;
+}
+.cab__folder--left .cab__tab { padding-left: clamp(0.8rem, 4vw, 3.5rem); }
+.cab__folder--right .cab__tab { padding-left: clamp(2.4rem, 10vw, 8rem); }
+.cab__tab:hover { background: rgba(244,244,244,0.07); color: var(--white); }
+.cab__folder.is-open .cab__tab { color: var(--white); background: rgba(244,244,244,0.06); }
+.cab__num { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.1em; color: var(--ash); flex: none; width: 3ch; }
+.cab__name { font-family: var(--font-display); font-weight: 300; font-size: clamp(1rem, 2.4vw, 1.25rem); letter-spacing: 0.01em; }
+.cab__meta { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ash); }
+.cab__price { margin-left: auto; font-family: var(--font-mono); font-size: 0.82rem; letter-spacing: 0.04em; color: var(--white); flex: none; }
+
+/* Opened folder panel — the "raised" file showing the visualizer + details */
+.cab__panel {
+  display: grid; grid-template-columns: minmax(0, 320px) 1fr; gap: clamp(1.2rem, 4vw, 2.4rem);
+  padding: 1.2rem clamp(0.8rem, 3vw, 2rem) 2rem clamp(2.4rem, 8vw, 6rem);
+  border-bottom: 1px solid var(--line);
+  animation: cab-open 0.28s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+@keyframes cab-open { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+.cab__visual { aspect-ratio: 1; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: #111; }
+.cab__visual img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cab__visual-empty { width: 100%; height: 100%; display: grid; place-items: center; font-size: 3rem; color: var(--ash); }
+.cab__detail { display: flex; flex-direction: column; gap: 0.55rem; min-width: 0; }
+.cab__detail-type { font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ash); }
+.cab__detail-title { font-family: var(--font-display); font-weight: 300; font-size: clamp(1.4rem, 4vw, 2rem); line-height: 1.1; }
+.cab__detail-sub { color: var(--mist); font-size: 0.95rem; }
+.cab__chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.2rem 0; }
+.cab__chip { font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fog); border: 1px solid var(--line); border-radius: 999px; padding: 0.24rem 0.6rem; }
+.cab__player { margin: 0.6rem 0 0.3rem; }
+.cab__actions { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-top: 0.6rem; }
+.cab__detail-price { font-family: var(--font-mono); font-size: 1.1rem; color: var(--white); }
+.cab__open { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fog); }
+.cab__open:hover { color: var(--white); }
+
+/* Loading skeleton folders */
+.cab__folder--skeleton { height: 48px; border-top: 1px solid var(--line); background: linear-gradient(90deg, rgba(244,244,244,0.03), rgba(244,244,244,0.06), rgba(244,244,244,0.03)); background-size: 200% 100%; animation: cab-shimmer 1.4s infinite; }
+@keyframes cab-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+@media (max-width: 640px) {
+  .cab__panel { grid-template-columns: 1fr; padding-left: clamp(1rem, 6vw, 2rem); }
+  .cab__folder--right .cab__tab { padding-left: clamp(1.6rem, 8vw, 3rem); }
+  .cab__meta { display: none; }
+}
