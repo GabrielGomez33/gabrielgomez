@@ -5,6 +5,7 @@ import path from 'path';
 import { requireAdmin } from '../../auth/middleware';
 import * as products from '../../services/products';
 import { probe, makeTaggedPreview, extractPeaks } from '../../services/media';
+import { processCover, SUPPORTED_COVER_EXT } from '../../services/images';
 import { productDir, ensureDir, safeName, relFromRoot } from '../../services/storage';
 
 // =============================================================================
@@ -27,7 +28,6 @@ router.param('id', (_req, res, next, value) => {
 });
 
 const AUDIO_EXT = new Set(['.wav', '.mp3', '.aiff', '.aif', '.flac', '.m4a', '.ogg']);
-const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -160,16 +160,31 @@ router.post('/:id/cover', upload.single('image'), async (req: Request, res: Resp
     return;
   }
   const ext = path.extname(f.originalname).toLowerCase();
-  if (!IMAGE_EXT.has(ext)) {
+  if (!SUPPORTED_COVER_EXT.has(ext)) {
     cleanup([f]);
-    res.status(400).json({ success: false, error: 'Unsupported image type.' });
+    res.status(400).json({
+      success: false,
+      error: 'Unsupported image type. Use JPEG, PNG, WebP, GIF, or HEIC.',
+    });
     return;
   }
-  ensureDir(productDir(id));
-  const coverAbs = path.join(productDir(id), `cover${ext === '.jpeg' ? '.jpg' : ext}`);
-  fs.renameSync(f.path, coverAbs);
-  await products.updateProduct(id, { coverImagePath: relFromRoot(coverAbs) });
-  res.json({ success: true, coverPath: relFromRoot(coverAbs) });
+  // Decode (incl. HEIC), orient upright, and normalize to WebP cover + thumbnail.
+  let processed;
+  try {
+    processed = await processCover(f.path, productDir(id));
+  } catch (err) {
+    cleanup([f]);
+    console.error('[uploads] cover processing failed:', err instanceof Error ? err.message : err);
+    res.status(400).json({ success: false, error: 'That image could not be read. Please try another file.' });
+    return;
+  } finally {
+    cleanup([f]); // remove the original upload; we keep only the normalized outputs
+  }
+  await products.updateProduct(id, {
+    coverImagePath: processed.coverRel,
+    coverThumbPath: processed.thumbRel,
+  });
+  res.json({ success: true, coverPath: processed.coverRel, thumbPath: processed.thumbRel });
 });
 
 export default router;

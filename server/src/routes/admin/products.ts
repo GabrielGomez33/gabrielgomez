@@ -2,11 +2,30 @@ import express, { type Request, type Response } from 'express';
 import { requireAdmin } from '../../auth/middleware';
 import * as products from '../../services/products';
 import { createCatalogProduct, isPayPalConfigured } from '../../services/paypal';
+import { signCoverToken } from '../../services/previewToken';
 
 const router = express.Router();
 router.use(requireAdmin); // everything here is admin-only
 
 const CATEGORIES = new Set(['music', 'clothing', 'accessory']);
+const API_BASE = '/GabrielGomez/api';
+
+// Attach cover URLs carrying a short-lived token, so the admin UI can preview a
+// draft product's cover with a plain <img> (which can't send an auth header).
+function withCover<T extends { id: number; cover_image_path?: string | null; cover_thumb_path?: string | null }>(
+  row: T,
+): T & { coverUrl: string | null; coverThumbUrl: string | null } {
+  const ct = signCoverToken(row.id);
+  return {
+    ...row,
+    coverUrl: row.cover_image_path ? `${API_BASE}/store/cover/${row.id}?ct=${ct}` : null,
+    coverThumbUrl: row.cover_thumb_path
+      ? `${API_BASE}/store/cover/${row.id}?size=thumb&ct=${ct}`
+      : row.cover_image_path
+        ? `${API_BASE}/store/cover/${row.id}?ct=${ct}`
+        : null,
+  };
+}
 
 // Create a product (metadata; media upload comes via a later endpoint).
 router.post('/', async (req: Request, res: Response): Promise<void> => {
@@ -70,7 +89,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   const category = req.query.category as products.Category | undefined;
   const status = req.query.status as products.Status | undefined;
   const rows = await products.listProducts({ category, status });
-  res.json({ success: true, products: rows });
+  res.json({ success: true, products: rows.map(withCover) });
 });
 
 // Detail with related rows.
@@ -80,7 +99,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
     res.status(404).json({ success: false, error: 'Not found.' });
     return;
   }
-  res.json({ success: true, product: await products.getFullProduct(row) });
+  res.json({ success: true, product: withCover(await products.getFullProduct(row)) });
 });
 
 // Update basic fields.
