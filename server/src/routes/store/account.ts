@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { type RowDataPacket } from 'mysql2/promise';
 import { query, execute } from '../../db/pool';
-import { sendEmail, escapeHtml } from '../../services/emailService';
+import { sendEmail, escapeHtml, renderEmail } from '../../services/emailService';
 import {
   signCustomerToken,
   requireCustomer,
@@ -70,13 +70,14 @@ async function issueVerifyEmail(customerId: number, email: string, name: string 
   const url = `${APP_URL()}/verify-email?token=${raw}`;
   void sendEmail({
     to: email,
-    subject: 'Verify your SonSoul email',
-    html: `<div style="font-family:system-ui,sans-serif;background:#0a0a0a;color:#f4f4f4;padding:24px;border-radius:12px;max-width:520px;margin:auto">
-      <h2 style="font-weight:300">Welcome${name ? `, ${escapeHtml(name)}` : ''}</h2>
-      <p style="color:#cfcfcf">Confirm your email to finish setting up your account.</p>
-      <p><a href="${url}" style="display:inline-block;background:#f4f4f4;color:#0a0a0a;text-decoration:none;padding:10px 18px;border-radius:999px">Verify email</a></p>
-    </div>`,
-    text: `Verify your SonSoul email: ${url}`,
+    subject: 'Confirm your email address',
+    html: renderEmail({
+      heading: `Welcome${name ? `, ${escapeHtml(name)}` : ''}`,
+      intro: 'Confirm your email to finish setting up your account.',
+      button: { text: 'Verify email', url },
+      footerNote: "If you didn't create this account, you can safely ignore this email.",
+    }),
+    text: `Confirm your email address to finish setting up your account:\n${url}\n\nIf you didn't create this account, ignore this email.`,
   }).catch(() => {});
 }
 
@@ -205,13 +206,13 @@ router.post('/forgot-password', async (req: Request, res: Response): Promise<voi
     const url = `${APP_URL()}/reset-password?token=${raw}`;
     void sendEmail({
       to: email,
-      subject: 'Reset your SonSoul password',
-      html: `<div style="font-family:system-ui,sans-serif;background:#0a0a0a;color:#f4f4f4;padding:24px;border-radius:12px;max-width:520px;margin:auto">
-        <h2 style="font-weight:300">Password reset</h2>
-        <p style="color:#cfcfcf">Use the link below within 1 hour. If you didn't request this, ignore it.</p>
-        <p><a href="${url}" style="display:inline-block;background:#f4f4f4;color:#0a0a0a;text-decoration:none;padding:10px 18px;border-radius:999px">Reset password</a></p>
-      </div>`,
-      text: `Reset your SonSoul password (valid 1 hour): ${url}`,
+      subject: 'Reset your password',
+      html: renderEmail({
+        heading: 'Reset your password',
+        intro: "Use the button below within 1 hour. If you didn't request this, you can ignore this email — your password won't change.",
+        button: { text: 'Reset password', url },
+      }),
+      text: `Reset your password (link valid for 1 hour):\n${url}\n\nIf you didn't request this, ignore this email.`,
     }).catch(() => {});
   } else {
     crypto.randomBytes(32); // keep timing comparable
