@@ -157,6 +157,9 @@ export const adminApi = {
   async deleteTrack(id: number, trackId: number): Promise<unknown> {
     return jsonReq(`/admin/products/${id}/tracks/${trackId}`, 'DELETE')
   },
+  async reanalyze(id: number): Promise<{ analyzed: number; previews: number }> {
+    return jsonReq(`/admin/products/${id}/reanalyze`, 'POST')
+  },
   async uploadCover(id: number, file: File): Promise<unknown> {
     const fd = new FormData()
     fd.append('image', file)

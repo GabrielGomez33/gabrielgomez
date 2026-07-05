@@ -418,6 +418,67 @@ router.delete('/:id/tracks/:trackId', async (req: Request, res: Response): Promi
   res.json({ success: true });
 });
 
+// --- Re-analyze: re-run BPM/key (+ classification) and rebuild previews ------
+// Lets already-uploaded audio pick up newly-installed DSP tools and the mid-song
+// preview without re-uploading the files.
+router.post('/:id/reanalyze', async (req: Request, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  const product = await products.getProductById(id);
+  if (!product || product.category !== 'music') {
+    res.status(404).json({ success: false, error: 'Music product not found.' });
+    return;
+  }
+  const isSamplePack = product.type === 'samplepack';
+  const tracks = await products.getTracks(id);
+  let analyzed = 0;
+  let previews = 0;
+  for (const t of tracks) {
+    if (!t.master_path) continue;
+    let masterAbs: string;
+    try {
+      masterAbs = resolveInStorage(t.master_path);
+    } catch {
+      continue;
+    }
+    if (!fs.existsSync(masterAbs)) continue;
+
+    let durationSec: number | null = t.length_sec ?? null;
+    if (durationSec == null) {
+      try {
+        durationSec = (await probe(masterAbs)).durationSec;
+      } catch {
+        /* ignore */
+      }
+    }
+    const analysis = await analyzeAudio({
+      filename: t.original_filename || t.name,
+      durationSec,
+      absFile: masterAbs,
+      useDsp: DSP_ENABLED,
+    });
+    await products.updateTrackAnalysis(t.id, {
+      bpm: analysis.bpm,
+      musicKey: analysis.key,
+      bpmSource: analysis.bpmSource,
+      keySource: analysis.keySource,
+      kind: analysis.kind,
+      sampleGroup: analysis.group,
+      sampleCategory: analysis.category,
+      applyClassification: isSamplePack,
+    });
+    analyzed += 1;
+
+    // Rebuild the (mid-song) preview: every track for non-sample types; only the
+    // curated preview set for sample packs.
+    const shouldPreview = isSamplePack ? t.is_preview === 1 : true;
+    if (shouldPreview) {
+      const ok = await buildTrackPreview(id, t.id, masterAbs, analysis.kind, durationSec);
+      if (ok) previews += 1;
+    }
+  }
+  res.json({ success: true, analyzed, previews });
+});
+
 // --- Cover image -------------------------------------------------------------
 router.post('/:id/cover', upload.single('image'), async (req: Request, res: Response): Promise<void> => {
   const id = Number(req.params.id);

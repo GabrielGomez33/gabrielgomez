@@ -138,6 +138,22 @@ export function ProductEditor() {
     }
   }
 
+  async function handleReanalyze() {
+    if (!id) return
+    setBusy(true)
+    setError('')
+    setMsg('')
+    try {
+      const r = await adminApi.reanalyze(Number(id))
+      setMsg(`Re-analyzed ${r.analyzed} track${r.analyzed === 1 ? '' : 's'} — ${r.previews} preview${r.previews === 1 ? '' : 's'} rebuilt.`)
+      await loadProduct().catch(() => {})
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Re-analyze failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function handleDeleteTrack(trackId: number) {
     if (!id || !confirm('Delete this track and its files?')) return
     setBusy(true)
@@ -364,6 +380,17 @@ export function ProductEditor() {
                   <p className="adm-muted">
                     Processing (ffprobe + analysis{isSamplePack ? '' : ' + preview + waveform'})… large folders take a moment.
                   </p>
+                )}
+                {(product.tracks?.length ?? 0) > 0 && (
+                  <div className="adm-reanalyze">
+                    <button className="adm-btn" onClick={handleReanalyze} disabled={busy}>
+                      Re-analyze audio (BPM/key + rebuild previews)
+                    </button>
+                    <p className="adm-muted">
+                      Re-runs detection on existing files — use after installing aubio/keyfinder or to
+                      pick up the mid-song preview. No re-upload needed.
+                    </p>
+                  </div>
                 )}
               </section>
 
