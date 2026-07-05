@@ -166,6 +166,23 @@ export function ProductEditor() {
 
   const isMusic = category === 'music'
 
+  // All metadata fields are mandatory. Music additionally needs genre/style/notes.
+  const basicComplete = Boolean(
+    title.trim() &&
+      subtitle.trim() &&
+      description.trim() &&
+      parseFloat(price) > 0 &&
+      (!isMusic || (genre && style && notes.trim())),
+  )
+  // Publishing additionally requires a cover and real content.
+  const hasCover = Boolean(product?.cover_image_path)
+  const hasContent = isMusic ? Boolean(product?.tracks?.length) : Boolean(product?.variants?.length)
+  const publishMissing: string[] = []
+  if (!basicComplete) publishMissing.push('all fields filled in')
+  if (!hasCover) publishMissing.push('a cover image')
+  if (!hasContent) publishMissing.push(isMusic ? 'at least one track' : 'at least one variant')
+  const canPublish = publishMissing.length === 0
+
   return (
     <div className="adm-editor">
       <div className="adm-list__head">
@@ -210,22 +227,22 @@ export function ProductEditor() {
         </label>
         <label className="adm-field">
           <span>Subtitle</span>
-          <input value={subtitle} onChange={(e) => setSubtitle(e.target.value)} />
+          <input value={subtitle} onChange={(e) => setSubtitle(e.target.value)} required />
         </label>
         <label className="adm-field">
           <span>Description</span>
-          <textarea rows={4} value={description} onChange={(e) => setDescription(e.target.value)} />
+          <textarea rows={4} value={description} onChange={(e) => setDescription(e.target.value)} required />
         </label>
         <label className="adm-field">
           <span>Price (USD)</span>
-          <input type="number" step="0.01" min="0" value={price} onChange={(e) => setPrice(e.target.value)} />
+          <input type="number" step="0.01" min="0.01" value={price} onChange={(e) => setPrice(e.target.value)} required />
         </label>
 
         {isMusic && (
           <div className="adm-grid2">
             <label className="adm-field">
               <span>Genre</span>
-              <select value={genre} onChange={(e) => setGenre(e.target.value)}>
+              <select value={genre} onChange={(e) => setGenre(e.target.value)} required>
                 <option value="">—</option>
                 {opts('genre').map((o) => (
                   <option key={o.value} value={o.value}>{o.label}</option>
@@ -234,7 +251,7 @@ export function ProductEditor() {
             </label>
             <label className="adm-field">
               <span>Style</span>
-              <select value={style} onChange={(e) => setStyle(e.target.value)}>
+              <select value={style} onChange={(e) => setStyle(e.target.value)} required>
                 <option value="">—</option>
                 {opts('music_style').map((o) => (
                   <option key={o.value} value={o.value}>{o.label}</option>
@@ -246,13 +263,14 @@ export function ProductEditor() {
         {isMusic && (
           <label className="adm-field">
             <span>Notes</span>
-            <input value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <input value={notes} onChange={(e) => setNotes(e.target.value)} required />
           </label>
         )}
 
-        <button className="adm-btn adm-btn--primary" type="submit" disabled={busy}>
+        <button className="adm-btn adm-btn--primary" type="submit" disabled={busy || !basicComplete}>
           {editing ? 'Save changes' : 'Create product'}
         </button>
+        {!basicComplete && <p className="adm-muted">All fields are required.</p>}
       </form>
 
       {editing && product && (
@@ -316,9 +334,28 @@ export function ProductEditor() {
           {!isMusic && <VariantEditor productId={product.id} variants={product.variants ?? []} options={options} onDone={loadProduct} />}
 
           {/* Actions */}
-          <section className="adm-section adm-actions">
-            <button className="adm-btn adm-btn--primary" onClick={doPublish} disabled={busy}>Publish</button>
-            <button className="adm-btn adm-btn--danger" onClick={doDelete} disabled={busy}>Delete</button>
+          <section className="adm-section adm-actions-wrap">
+            {product.status !== 'published' && !canPublish && (
+              <div className="adm-checklist">
+                <p>To publish, this product needs:</p>
+                <ul>
+                  {publishMissing.map((m) => (
+                    <li key={m}>{m}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div className="adm-actions">
+              <button
+                className="adm-btn adm-btn--primary"
+                onClick={doPublish}
+                disabled={busy || !canPublish}
+                title={canPublish ? '' : `Missing: ${publishMissing.join(', ')}`}
+              >
+                {product.status === 'published' ? 'Re-publish' : 'Publish'}
+              </button>
+              <button className="adm-btn adm-btn--danger" onClick={doDelete} disabled={busy}>Delete</button>
+            </div>
           </section>
         </>
       )}
