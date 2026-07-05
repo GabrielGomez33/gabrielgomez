@@ -6,7 +6,7 @@ import { requireAdmin } from '../../auth/middleware';
 import * as products from '../../services/products';
 import { probe, makeTaggedPreview, extractPeaks, resolveInStorage } from '../../services/media';
 import { processCover, SUPPORTED_COVER_EXT } from '../../services/images';
-import { analyzeAudio } from '../../services/audioAnalysis';
+import { analyzeAudio, prettifyName, keyForFilename, type Analysis } from '../../services/audioAnalysis';
 import { productDir, ensureDir, safeName, relFromRoot } from '../../services/storage';
 
 // =============================================================================
@@ -53,6 +53,39 @@ function cleanup(files: Express.Multer.File[]): void {
       /* best effort */
     }
   }
+}
+
+// A human, self-describing filename for a sample master: prettified stem plus
+// BPM and key, so the downloaded files are informative (e.g. "Dusk Loop 140BPM
+// Amin.wav"). Only truly unsafe characters are stripped; spaces/#/() are kept.
+function sampleMasterFilename(original: string, analysis: Analysis): string {
+  const ext = path.extname(original).toLowerCase();
+  const pretty = prettifyName(original);
+  const compact = pretty.toLowerCase().replace(/\s+/g, '');
+  const parts = [pretty];
+  // Only append BPM/key if the name doesn't already carry them.
+  if (analysis.bpm && !compact.includes(String(analysis.bpm))) parts.push(`${analysis.bpm}BPM`);
+  const kf = keyForFilename(analysis.key);
+  if (kf && !compact.includes(kf.toLowerCase())) parts.push(kf);
+  const base = parts
+    .join(' ')
+    .replace(/[^\w\s#()\-]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return `${base || 'sample'}${ext}`;
+}
+
+// Ensure a filename doesn't collide in its folder: "name.wav" → "name (2).wav".
+function uniqueInDir(dir: string, filename: string): string {
+  const ext = path.extname(filename);
+  const stem = filename.slice(0, filename.length - ext.length);
+  let candidate = filename;
+  let n = 2;
+  while (fs.existsSync(path.join(dir, candidate))) {
+    candidate = `${stem} (${n})${ext}`;
+    n += 1;
+  }
+  return candidate;
 }
 
 // Sanitize a browser-supplied relative folder path (from a folder upload) into a
@@ -146,7 +179,9 @@ router.post('/:id/audio', upload.array('files', MAX_FILES), async (req: Request,
     const relDir = safeRelDir(relPaths[idx]);
     const destDir = relDir ? path.join(mastersDir, relDir) : mastersDir;
     ensureDir(destDir);
-    const masterAbs = path.join(destDir, `${position}_${safeName(f.originalname)}`);
+    // Land under a temporary safe name; we may rename it to a self-describing
+    // name once analysis is done (needs the file on disk to probe/analyze).
+    let masterAbs = path.join(destDir, `${position}_${safeName(f.originalname)}`);
     fs.renameSync(f.path, masterAbs);
 
     // Technical info (ffprobe).
@@ -172,8 +207,21 @@ router.post('/:id/audio', upload.array('files', MAX_FILES), async (req: Request,
       useDsp: DSP_ENABLED,
     });
 
+    // Sample-pack masters get a human, self-describing filename (BPM + key) so
+    // the downloaded files are tidy. Other types keep their internal name.
+    if (isSamplePack) {
+      const finalName = uniqueInDir(destDir, sampleMasterFilename(f.originalname, analysis));
+      const finalAbs = path.join(destDir, finalName);
+      try {
+        fs.renameSync(masterAbs, finalAbs);
+        masterAbs = finalAbs;
+      } catch (err) {
+        console.error('[uploads] master rename failed:', err instanceof Error ? err.message : err);
+      }
+    }
+
     const trackId = await products.addTrack(id, {
-      name: path.parse(f.originalname).name,
+      name: prettifyName(f.originalname),
       position,
       genre: (req.body.genre as string) ?? null,
       style: (req.body.style as products.MusicStyle) ?? null,
@@ -204,7 +252,7 @@ router.post('/:id/audio', upload.array('files', MAX_FILES), async (req: Request,
 
     added.push({
       trackId,
-      name: path.parse(f.originalname).name,
+      name: prettifyName(f.originalname),
       position,
       kind: analysis.kind,
       group: analysis.group,

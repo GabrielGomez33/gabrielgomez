@@ -57,6 +57,35 @@ const NOTE = '(?:[A-G])(?:#|b)?';
 // of words like "Bass"/"Clap" for a key. e.g. "Amin", "F#m", "Gmaj", "Dbmin".
 const KEY_RX = new RegExp(`\\b(${NOTE})[ _-]?(maj(?:or)?|min(?:or)?|m|M)\\b`);
 
+// Tokens we strip from a display name because we surface them as clean, separate
+// metadata (BPM/key tags) — and, for sample packs, re-add them to the download
+// filename in a tidy form.
+const BPM_TOKEN = /\b\d{2,3}\s?bpm\b/gi;
+const KEY_TOKEN = new RegExp(`\\b${NOTE}[ _-]?(maj(?:or)?|min(?:or)?|m|M)\\b`, 'g');
+
+/**
+ * Turn a raw upload filename into a clean display name: drop the extension,
+ * turn separators into spaces, remove BPM/key tokens (shown separately), collapse
+ * whitespace, and gently title-case. Falls back to the bare stem if stripping
+ * leaves nothing (e.g. a file literally named "Amin.wav").
+ */
+export function prettifyName(original: string): string {
+  const stem = path.parse(original).name;
+  let s = stem.replace(/[_\-.]+/g, ' ');
+  s = s.replace(BPM_TOKEN, ' ').replace(KEY_TOKEN, ' ');
+  s = s.replace(/\s+/g, ' ').trim();
+  if (!s) s = stem.replace(/[_\-.]+/g, ' ').replace(/\s+/g, ' ').trim() || stem;
+  return s
+    .split(' ')
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(' ');
+}
+
+/** Compact key form for filenames: "A min" → "Amin", "F# min" → "F#min". */
+export function keyForFilename(key: string | null): string {
+  return key ? key.replace(/\s+/g, '') : '';
+}
+
 /** Parse hints purely from the filename (no audio). */
 function fromFilename(filename: string): {
   bpm: number | null;
