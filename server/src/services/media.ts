@@ -77,10 +77,12 @@ const PREVIEW_SECONDS = Number(process.env.PREVIEW_SECONDS || 10);
 
 function previewArgs(masterAbs: string, seconds: number, tagFile?: string): string[] {
   if (tagFile && fs.existsSync(tagFile)) {
+    // Tag plays ONCE at the start (no aloop), mixed over the beat; output is
+    // trimmed to `seconds` from the master.
     return [
       '-y', '-i', masterAbs, '-i', tagFile,
       '-filter_complex',
-      '[1:a]aloop=loop=-1:size=2e9,volume=0.55[t];[0:a][t]amix=inputs=2:duration=first:dropout_transition=0[a]',
+      '[1:a]volume=0.6[t];[0:a][t]amix=inputs=2:duration=first:dropout_transition=0[a]',
       '-map', '[a]', '-t', String(seconds), '-ac', '2', '-ar', '44100', '-b:a', '96k',
     ];
   }
