@@ -275,3 +275,21 @@
 .samplepack__group li { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.85rem; }
 .samplepack__name { color: var(--mist); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .samplepack__tags { font-family: var(--font-mono); font-size: 0.66rem; color: var(--ash); flex: none; }
+
+/* =========================================================================
+   Responsive — keep everything within the viewport (no horizontal scroll)
+   ========================================================================= */
+.pdetail__info { min-width: 0; }
+
+/* The nav is the main offender on phones: brand + 3 tabs + account + cart
+   won't fit one row. Wrap the tabs onto their own full-width row. */
+@media (max-width: 600px) {
+  .st__nav-inner { height: auto; flex-wrap: wrap; padding-block: 0.55rem; gap: 0.4rem 0.8rem; }
+  .st__brand { font-size: 0.9rem; }
+  .st__tabs { order: 3; width: 100%; justify-content: space-between; gap: 0.5rem; }
+  .st__account { max-width: 7ch; }
+}
+
+/* Belt-and-suspenders: media never wider than its column, and long words wrap. */
+.pdetail__media, .cab__visual, .pcard__media { max-width: 100%; }
+.cab__name, .pdetail__title, .cab__detail-title, .samplepack__name { overflow-wrap: anywhere; }

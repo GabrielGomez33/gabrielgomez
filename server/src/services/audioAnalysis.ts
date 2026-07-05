@@ -162,7 +162,16 @@ function decideKind(
 // --- Optional DSP layer ------------------------------------------------------
 const AUBIO = process.env.AUBIO_TEMPO_PATH || process.env.AUBIO_PATH || 'aubio';
 const KEYFINDER = process.env.KEYFINDER_PATH || 'keyfinder-cli';
-const DSP_TIMEOUT_MS = Number(process.env.DSP_TIMEOUT_MS || 8000);
+const DSP_TIMEOUT_MS = Number(process.env.DSP_TIMEOUT_MS || 12000);
+
+// Warn once per missing binary so the operator can see DSP isn't wired up,
+// instead of silently falling back forever.
+const warnedMissing = new Set<string>();
+function warnMissing(bin: string): void {
+  if (warnedMissing.has(bin)) return;
+  warnedMissing.add(bin);
+  console.warn(`[audioAnalysis] DSP tool not found: ${bin} — falling back to filename heuristics. Install it or set its *_PATH env.`);
+}
 
 function runCapture(bin: string, args: string[]): Promise<string | null> {
   return new Promise((resolve) => {
@@ -172,6 +181,7 @@ function runCapture(bin: string, args: string[]): Promise<string | null> {
     try {
       proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'ignore'] });
     } catch {
+      warnMissing(bin);
       resolve(null);
       return;
     }
@@ -187,10 +197,11 @@ function runCapture(bin: string, args: string[]): Promise<string | null> {
       }
     }, DSP_TIMEOUT_MS);
     proc.stdout?.on('data', (d) => (out += d.toString()));
-    proc.on('error', () => {
+    proc.on('error', (err: NodeJS.ErrnoException) => {
       if (!done) {
         done = true;
         clearTimeout(timer);
+        if (err?.code === 'ENOENT') warnMissing(bin);
         resolve(null);
       }
     });
@@ -203,10 +214,15 @@ function runCapture(bin: string, args: string[]): Promise<string | null> {
   });
 }
 
-/** aubio tempo → median BPM. `aubio tempo` prints one timestamp per beat. */
+// The aubio multi-tool takes `aubio tempo <file>`; the standalone binary is just
+// `aubiotempo <file>` (no subcommand). Detect which one is configured.
+function aubioTempoArgs(absFile: string): string[] {
+  return path.basename(AUBIO).replace(/\.exe$/, '') === 'aubiotempo' ? [absFile] : ['tempo', absFile];
+}
+
+/** aubio tempo → median BPM. It prints one beat timestamp (seconds) per line. */
 async function dspBpm(absFile: string): Promise<number | null> {
-  // `aubio tempo -i file` prints beat timestamps (seconds), one per line.
-  const out = await runCapture(AUBIO, ['tempo', '-i', absFile]);
+  const out = await runCapture(AUBIO, aubioTempoArgs(absFile));
   if (!out) return null;
   const times = out
     .split(/\s+/)
@@ -222,16 +238,23 @@ async function dspBpm(absFile: string): Promise<number | null> {
   return bpm >= 40 && bpm <= 300 ? bpm : null;
 }
 
-/** keyfinder-cli → musical key string like "Am" / "F#" → normalized "A min". */
+/**
+ * keyfinder-cli prints the detected key (e.g. "Am", "F#m", "Ab minor"). The file
+ * is the positional arg — the previous `-n <file>` form fed the file as the
+ * notation flag and detected nothing.
+ */
 async function dspKey(absFile: string): Promise<string | null> {
-  const out = await runCapture(KEYFINDER, ['-n', absFile]);
+  const out = await runCapture(KEYFINDER, [absFile]);
   if (!out) return null;
-  const raw = out.trim().split(/\s+/).pop() || '';
-  const m = raw.match(/^([A-G](?:#|b)?)(m|maj|min)?$/i);
+  const text = out.trim();
+  // Handle "A minor", "Am", "Abm", "F# major", "C#" etc.
+  const m = text.match(/\b([A-G](?:#|b)?)\s*(m|min|minor|maj|major)?\b/i);
   if (!m) return null;
   const note = m[1][0].toUpperCase() + (m[1][1] === '#' || m[1][1] === 'b' ? m[1][1] : '');
   const q = (m[2] || '').toLowerCase();
-  return q === 'm' || q === 'min' ? `${note} min` : q === 'maj' ? `${note} maj` : note;
+  if (q === 'm' || q.startsWith('min')) return `${note} min`;
+  if (q.startsWith('maj')) return `${note} maj`;
+  return note;
 }
 
 const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';

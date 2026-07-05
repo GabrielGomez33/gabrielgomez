@@ -134,6 +134,13 @@ export function formatPrice(cents: number, currency = 'USD'): string {
  * its style (instruments = beat/instrumental, vocal/mixed = song with lyrics) —
  * that's the song-vs-beat distinction, not anything derived from length.
  */
+/** Display label for a music style value ('instruments' reads as 'Instrumental'). */
+export function styleLabel(style?: string | null): string {
+  if (!style) return ''
+  if (style === 'instruments') return 'Instrumental'
+  return style.charAt(0).toUpperCase() + style.slice(1)
+}
+
 export function musicTypeLabel(type: string, style?: string | null): string {
   switch (type) {
     case 'single':

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { storeApi, formatPrice, formatSecs, musicTypeLabel, type ProductDetail as PD, type Variant } from './storeApi'
+import { storeApi, formatPrice, formatSecs, musicTypeLabel, styleLabel, type ProductDetail as PD, type Variant } from './storeApi'
 import { WaveformPlayer } from './WaveformPlayer'
 import { useCart } from './CartContext'
 
@@ -267,7 +267,7 @@ export function ProductDetail() {
                     <div><dt>Genre</dt><dd>{String(product.musicMeta.genre)}</dd></div>
                   )}
                   {(product.musicMeta.style as string) && (
-                    <div><dt>Style</dt><dd>{String(product.musicMeta.style)}</dd></div>
+                    <div><dt>Style</dt><dd>{styleLabel(product.musicMeta.style as string)}</dd></div>
                   )}
                   {Boolean(product.musicMeta.track_count) && (
                     <div><dt>Tracks</dt><dd>{String(product.musicMeta.track_count)}</dd></div>
