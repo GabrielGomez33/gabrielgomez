@@ -6,6 +6,7 @@ import { computeCart, type CartItemInput } from '../../services/pricing';
 import { createOrder as ppCreateOrder, captureOrder as ppCaptureOrder, isPayPalConfigured } from '../../services/paypal';
 import { createDigitalGrants } from '../../services/delivery';
 import { sendEmail, escapeHtml, renderEmail } from '../../services/emailService';
+import { optionalCustomer } from '../../auth/customer';
 
 // =============================================================================
 // Checkout. Prices are recomputed server-side (never trust the client). An order
@@ -81,7 +82,7 @@ function freeLimited(ip: string): boolean {
 }
 
 // --- Create order ------------------------------------------------------------
-router.post('/create-order', async (req: Request, res: Response): Promise<void> => {
+router.post('/create-order', optionalCustomer, async (req: Request, res: Response): Promise<void> => {
   if (!isPayPalConfigured()) {
     res.status(503).json({ success: false, error: 'Payments are not configured.' });
     return;
@@ -117,16 +118,20 @@ router.post('/create-order', async (req: Request, res: Response): Promise<void> 
     }
   }
 
-  // Persist our order first (source of truth for the expected amount).
+  // Persist our order first (source of truth for the expected amount). Link it to
+  // the signed-in customer when present, or to any account that later logs in with
+  // this email (linkGuestOrders) — otherwise it stays a guest order.
   const num = orderNumber();
+  const customerId = req.customer?.id ?? null;
   const result = await execute(
     `INSERT INTO orders
-       (order_number, email, status, currency, subtotal_cents, shipping_cents, tax_cents, total_cents,
+       (order_number, email, customer_id, status, currency, subtotal_cents, shipping_cents, tax_cents, total_cents,
         has_physical, has_digital, ship_name, ship_address, ip_truncated)
-     VALUES (?, ?, 'created', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, 'created', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       num,
       email,
+      customerId,
       totals.currency,
       totals.subtotalCents,
       totals.shippingCents,
@@ -268,7 +273,7 @@ router.post('/capture', async (req: Request, res: Response): Promise<void> => {
 // no PayPal round-trip: we validate, record a paid order, issue grants, and email
 // the links. Prices are always recomputed server-side, so a client cannot force a
 // paid item to $0 — the total must genuinely be zero from real product prices.
-router.post('/claim-free', async (req: Request, res: Response): Promise<void> => {
+router.post('/claim-free', optionalCustomer, async (req: Request, res: Response): Promise<void> => {
   const ip = truncateIp(req.ip) || 'unknown';
   if (freeLimited(ip)) {
     res.status(429).json({ success: false, error: 'Too many free claims. Please try again in a little while.' });
@@ -300,12 +305,13 @@ router.post('/claim-free', async (req: Request, res: Response): Promise<void> =>
   }
 
   const num = orderNumber();
+  const customerId = req.customer?.id ?? null;
   const result = await execute(
     `INSERT INTO orders
-       (order_number, email, status, currency, subtotal_cents, shipping_cents, tax_cents, total_cents,
+       (order_number, email, customer_id, status, currency, subtotal_cents, shipping_cents, tax_cents, total_cents,
         has_physical, has_digital, ip_truncated, paid_at)
-     VALUES (?, ?, 'paid', ?, 0, 0, 0, 0, 0, ?, ?, NOW())`,
-    [num, email, totals.currency, totals.hasDigital ? 1 : 0, truncateIp(req.ip)],
+     VALUES (?, ?, ?, 'paid', ?, 0, 0, 0, 0, 0, ?, ?, NOW())`,
+    [num, email, customerId, totals.currency, totals.hasDigital ? 1 : 0, truncateIp(req.ip)],
   );
   const orderId = result.insertId;
 

@@ -75,6 +75,33 @@ interface CustomerRow extends RowDataPacket {
   password_changed_at: string;
 }
 
+/**
+ * Populate `req.customer` if a valid, current token is present, but never block
+ * the request. Used on guest-friendly routes (checkout) so a logged-in buyer's
+ * order can be linked to their account while guests still check out freely.
+ */
+export async function optionalCustomer(req: Request, _res: Response, next: NextFunction): Promise<void> {
+  const [scheme, token] = (req.headers.authorization || '').split(' ');
+  if (scheme !== 'Bearer' || !token) {
+    next();
+    return;
+  }
+  try {
+    const payload = verifyCustomerToken(token);
+    const rows = await query<CustomerRow[]>(
+      'SELECT id, email, is_active, password_changed_at FROM customers WHERE id = ?',
+      [payload.sub],
+    );
+    const c = rows[0];
+    if (c && c.is_active === 1 && pcatOf(c.password_changed_at) === payload.pcat) {
+      req.customer = { id: c.id, email: c.email };
+    }
+  } catch {
+    /* ignore — treat as guest */
+  }
+  next();
+}
+
 /** Require a valid customer token whose `pcat` still matches the DB (not reset since). */
 export async function requireCustomer(req: Request, res: Response, next: NextFunction): Promise<void> {
   const [scheme, token] = (req.headers.authorization || '').split(' ');
