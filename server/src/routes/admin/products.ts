@@ -46,10 +46,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       res.status(400).json({ success: false, error: 'Style is required.', field: 'style' });
       return;
     }
-    if (!str(b.notes)) {
-      res.status(400).json({ success: false, error: 'Notes are required.', field: 'notes' });
-      return;
-    }
   }
   const id = await products.createProduct({
     category: b.category,

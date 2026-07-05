@@ -172,7 +172,7 @@ export function ProductEditor() {
       subtitle.trim() &&
       description.trim() &&
       parseFloat(price) > 0 &&
-      (!isMusic || (genre && style && notes.trim())),
+      (!isMusic || (genre && style)),
   )
   // Publishing additionally requires a cover and real content.
   const hasCover = Boolean(product?.cover_image_path)
@@ -262,8 +262,8 @@ export function ProductEditor() {
         )}
         {isMusic && (
           <label className="adm-field">
-            <span>Notes</span>
-            <input value={notes} onChange={(e) => setNotes(e.target.value)} required />
+            <span>Notes <span className="adm-optional">(optional)</span></span>
+            <input value={notes} onChange={(e) => setNotes(e.target.value)} />
           </label>
         )}
 

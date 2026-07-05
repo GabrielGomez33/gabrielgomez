@@ -96,3 +96,5 @@
 .adm-login { min-height: 100svh; display: grid; place-items: center; background: var(--bg); color: var(--fg); position: relative; z-index: 2; padding: 1.5rem; }
 .adm-login__card { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 1.1rem; border: 1px solid var(--line); padding: 2rem; border-radius: 10px; }
 .adm-login__title { font-family: var(--font-display); font-weight: 200; letter-spacing: 0.14em; text-transform: uppercase; font-size: 1.4rem; text-align: center; }
+
+.adm-optional { color: var(--smoke); text-transform: none; letter-spacing: 0; }
