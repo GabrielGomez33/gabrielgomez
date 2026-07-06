@@ -4,6 +4,14 @@
 # /GabrielGomez at this build's dist/ output; this file ships inside dist so it
 # lands in the web root on deploy.
 # =============================================================================
+# Never cache the service worker, its registration, or the manifest, so new
+# deploys are picked up promptly (the PWA update prompt depends on this).
+<IfModule mod_headers.c>
+  <FilesMatch "(sw\.js|registerSW\.js|manifest\.webmanifest)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+  </FilesMatch>
+</IfModule>
+
 RewriteEngine On
 RewriteBase /GabrielGomez/
 
