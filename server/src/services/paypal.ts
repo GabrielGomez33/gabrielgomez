@@ -155,6 +155,24 @@ export async function getOrder(orderId: string): Promise<{ id: string; status: s
   return ppFetch(`/v2/checkout/orders/${orderId}`, { method: 'GET' });
 }
 
+// Refund a captured payment. Omit amount for a full refund; pass cents for a
+// partial. Idempotency key prevents a double-refund on a retried request.
+export async function refundCapture(
+  captureId: string,
+  opts: { amountCents?: number; currency?: string; requestId?: string; note?: string } = {},
+): Promise<{ id: string; status: string }> {
+  const body: Record<string, unknown> = {};
+  if (opts.amountCents != null) {
+    body.amount = { value: money(opts.amountCents), currency_code: (opts.currency || 'USD').toUpperCase() };
+  }
+  if (opts.note) body.note_to_payer = opts.note.slice(0, 255);
+  return ppFetch(`/v2/payments/captures/${captureId}/refund`, {
+    method: 'POST',
+    headers: opts.requestId ? { 'PayPal-Request-Id': opts.requestId } : {},
+    body: JSON.stringify(body),
+  });
+}
+
 // --- Webhook verification ---------------------------------------------------
 export async function verifyWebhookSignature(headers: Record<string, string>, rawBody: unknown): Promise<boolean> {
   const webhookId = process.env.PAYPAL_WEBHOOK_ID;

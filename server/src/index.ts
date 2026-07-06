@@ -8,6 +8,7 @@ import adminAuthRouter from './routes/admin/auth';
 import adminProductsRouter from './routes/admin/products';
 import adminUploadsRouter from './routes/admin/uploads';
 import adminOptionsRouter from './routes/admin/options';
+import adminOrdersRouter from './routes/admin/orders';
 import storeCatalogRouter from './routes/store/catalog';
 import storeStreamRouter from './routes/store/stream';
 import storeCheckoutRouter from './routes/store/checkout';
@@ -80,6 +81,7 @@ router.use('/admin/auth', adminAuthRouter);
 router.use('/admin/products', adminProductsRouter);
 router.use('/admin/products', adminUploadsRouter); // upload endpoints (:id/audio, :id/cover)
 router.use('/admin/options', adminOptionsRouter);
+router.use('/admin/orders', adminOrdersRouter);
 
 // -- SonSoul: public storefront catalog + secure preview streaming -----------
 router.use('/store', storeCatalogRouter);

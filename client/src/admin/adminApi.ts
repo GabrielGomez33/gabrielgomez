@@ -85,6 +85,28 @@ export interface AttrOption {
   value: string
   label: string
 }
+export interface OrderItem {
+  title_snapshot: string
+  unit_price_cents: number
+  quantity: number
+  license_tier: string | null
+  is_digital: number
+}
+export interface Order {
+  id: number
+  order_number: string
+  email: string
+  status: string
+  currency: string
+  total_cents: number
+  has_physical: number
+  has_digital: number
+  fulfillment_status: string
+  paypal_capture_id: string | null
+  paid_at: string | null
+  created_at: string
+  items: OrderItem[]
+}
 
 export const adminApi = {
   async login(username: string, password: string): Promise<void> {
@@ -159,6 +181,12 @@ export const adminApi = {
   },
   async reanalyze(id: number): Promise<{ analyzed: number; previews: number }> {
     return jsonReq(`/admin/products/${id}/reanalyze`, 'POST')
+  },
+  listOrders(): Promise<{ orders: Order[] }> {
+    return jsonReq('/admin/orders', 'GET')
+  },
+  refundOrder(id: number): Promise<{ order: Order; alreadyRefunded?: boolean }> {
+    return jsonReq(`/admin/orders/${id}/refund`, 'POST')
   },
   async uploadCover(id: number, file: File): Promise<unknown> {
     const fd = new FormData()

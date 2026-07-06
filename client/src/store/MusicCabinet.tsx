@@ -100,7 +100,7 @@ export function MusicCabinet() {
     <section className="cab">
       <header className="cab__head">
         <h1 className="catalog__title">SonSoul</h1>
-        <p className="catalog__blurb">Beats, beatpacks &amp; albums. Cloudy, ethereal, alternative.</p>
+        <p className="catalog__blurb">Beats &amp; sample packs, singles &amp; albums. Cloudy, ethereal, alternative.</p>
         <div className="cab__facets" role="tablist" aria-label="Sort the cabinet by">
           <span className="cab__facets-label">Drawer&nbsp;by</span>
           {FACETS.map((f) => (

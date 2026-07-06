@@ -19,8 +19,8 @@ export default defineConfig({
       includeAssets: ['favicon.svg', 'favicon-32x32.png', 'apple-touch-icon.png'],
       manifest: {
         id: '/GabrielGomez/',
-        name: 'Gabriel Gomez — SonSoul',
-        short_name: 'SonSoul',
+        name: 'Gabriel Gomez',
+        short_name: 'Gabriel Gomez',
         description:
           'Gabriel Gomez — developer, creator, and musician. Portfolio and home of SonSoul: cloudy, ethereal, alternative beats & sample packs.',
         start_url: '/GabrielGomez/',

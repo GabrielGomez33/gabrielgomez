@@ -40,7 +40,7 @@ export const projects: Project[] = [
     name: 'SonSoul',
     role: 'Music storefront + PWA',
     blurb:
-      'A digital music storefront for beats, sample packs, singles & albums — a filing-cabinet browser, tagged waveform previews, and secure zip delivery. Folder uploads are auto-analyzed (BPM/key, one-shot vs loop, grouping); checkout runs on PayPal with a free path, customer accounts, and an installable PWA. React 19 + Node/Express + MySQL, ffmpeg for previews.',
+      'Music: Beats & sample packs, singles & albums — a filing-cabinet browser, tagged waveform previews, and secure zip delivery. Folder uploads are auto-analyzed (BPM/key, one-shot vs loop, grouping); checkout runs on PayPal with a free path, customer accounts, and an installable PWA. React 19 + Node/Express + MySQL, ffmpeg for previews.',
     stack: ['React 19', 'TypeScript', 'Node/Express', 'MySQL', 'PayPal', 'ffmpeg', 'PWA'],
     github: 'https://github.com/GabrielGomez33/gabrielgomez',
     live: 'https://www.theundergroundrailroad.world/GabrielGomez/store',
@@ -91,6 +91,6 @@ export const socials: SocialLink[] = [
 // the navigation and information architecture already account for it.
 export const sonsoul = {
   name: 'SonSoul',
-  tagline: 'Beats & beatpacks. Cloudy, alternative, ethereal, trippy.',
+  tagline: 'Music: Beats & sample packs, singles & albums. Cloudy, alternative, ethereal, trippy.',
   status: 'Coming soon',
 }

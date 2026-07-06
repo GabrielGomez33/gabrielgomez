@@ -53,7 +53,7 @@ export function InstallPrompt() {
   }
 
   return (
-    <div style={BAR} role="dialog" aria-label="Install SonSoul">
+    <div style={BAR} role="dialog" aria-label="Install Gabriel Gomez">
       <div style={CARD}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
           <img
@@ -65,7 +65,7 @@ export function InstallPrompt() {
             style={{ width: 42, height: 42, flexShrink: 0, borderRadius: 10 }}
           />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ margin: 0, fontWeight: 500, fontSize: 14 }}>Add SonSoul to your home screen</p>
+            <p style={{ margin: 0, fontWeight: 500, fontSize: 14 }}>Add G.G to your home screen</p>
             {shouldShowIOSTutorial ? (
               <p style={{ margin: '4px 0 0', fontSize: 12.5, lineHeight: 1.5, color: '#cfcfcf' }}>
                 Tap the Share icon{' '}
