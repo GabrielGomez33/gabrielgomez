@@ -5,6 +5,7 @@ import { getToken, adminApi } from './adminApi'
 import { Login } from './Login'
 import { ProductList } from './ProductList'
 import { ProductEditor } from './ProductEditor'
+import { OrderList } from './OrderList'
 
 export default function AdminApp() {
   const [authed, setAuthed] = useState<boolean>(Boolean(getToken()))
@@ -26,6 +27,7 @@ export default function AdminApp() {
         <Link to="/admin" className="adm__brand">SonSoul · Admin</Link>
         <nav className="adm__nav">
           <Link to="/admin">Products</Link>
+          <Link to="/admin/orders">Orders</Link>
           <Link to="/admin/new">+ New</Link>
           <button className="adm__logout" onClick={logout}>Log out</button>
         </nav>
@@ -33,6 +35,7 @@ export default function AdminApp() {
       <main className="adm__main">
         <Routes>
           <Route index element={<ProductList />} />
+          <Route path="orders" element={<OrderList />} />
           <Route path="new" element={<ProductEditor />} />
           <Route path=":id" element={<ProductEditor />} />
         </Routes>

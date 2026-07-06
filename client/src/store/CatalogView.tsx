@@ -4,7 +4,7 @@ import { ProductCard } from './ProductCard'
 import { MusicCabinet } from './MusicCabinet'
 
 const HEADINGS: Record<Category, { title: string; blurb: string }> = {
-  music: { title: 'SonSoul', blurb: 'Beats, beatpacks & albums. Cloudy, ethereal, alternative.' },
+  music: { title: 'SonSoul', blurb: 'Beats & sample packs, singles & albums. Cloudy, ethereal, alternative.' },
   clothing: { title: 'Wear', blurb: 'Considered pieces in black & white.' },
   accessory: { title: 'Accessories', blurb: 'The finishing details.' },
 }

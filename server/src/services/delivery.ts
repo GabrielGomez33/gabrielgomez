@@ -52,6 +52,17 @@ export async function createDigitalGrants(orderId: number): Promise<string[]> {
   return tokens;
 }
 
+/** Revoke all download grants for an order (e.g. on refund) — links stop working. */
+export async function revokeOrderGrants(orderId: number): Promise<void> {
+  await execute(
+    `UPDATE download_grants dg
+       JOIN order_items oi ON oi.id = dg.order_item_id
+        SET dg.expires_at = NOW(), dg.max_downloads = 0
+      WHERE oi.order_id = ?`,
+    [orderId],
+  );
+}
+
 export async function getGrantByToken(token: string): Promise<GrantRow | null> {
   const rows = await query<GrantRow[]>('SELECT * FROM download_grants WHERE token = ?', [token]);
   return rows[0] ?? null;
