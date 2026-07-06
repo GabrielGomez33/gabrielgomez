@@ -468,7 +468,7 @@ export async function addVariant(productId: number, v: VariantInput): Promise<nu
   return result.insertId;
 }
 
-export type LicenseTier = 'mp3' | 'wav' | 'stems' | 'exclusive';
+export type LicenseTier = 'mp3' | 'wav' | 'stems' | 'unlimited' | 'exclusive';
 export async function addLicenseTier(productId: number, tier: LicenseTier, priceCents: number): Promise<number> {
   const result = await execute(
     `INSERT INTO music_license_tiers (product_id, tier, price_cents) VALUES (?, ?, ?)

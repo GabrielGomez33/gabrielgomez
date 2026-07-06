@@ -40,12 +40,15 @@ interface OrderLike {
 }
 function sendOrderEmail(order: OrderLike, downloads: string[]): void {
   const free = order.total_cents === 0;
-  const bodyHtml = downloads.length
+  const licenseUrl = `${APP_URL()}/store/terms#licenses`;
+  const downloadsHtml = downloads.length
     ? `<p style="margin:0 0 10px;color:#cfcfcf;font-size:15px;">Your download${downloads.length > 1 ? 's' : ''}:</p>
-       <ul style="margin:0;padding-left:18px;color:#cfcfcf;font-size:14px;">${downloads
+       <ul style="margin:0 0 14px;padding-left:18px;color:#cfcfcf;font-size:14px;">${downloads
          .map((d) => `<li style="margin:5px 0;"><a href="${d}" style="color:#f4f4f4;">${escapeHtml(d)}</a></li>`)
          .join('')}</ul>`
     : '';
+  // Every order email states the governing license.
+  const licenseHtml = `<p style="margin:0;color:#8a8a8a;font-size:13px;line-height:1.6;">Your purchase is governed by the SonSoul <a href="${licenseUrl}" style="color:#cfcfcf;">License Agreement &amp; Terms</a>. All sales are final.</p>`;
   void sendEmail({
     to: order.email,
     subject: `Your order ${order.order_number}`,
@@ -54,10 +57,10 @@ function sendOrderEmail(order: OrderLike, downloads: string[]): void {
       intro: free
         ? `Order ${escapeHtml(order.order_number)} — free.`
         : `Order ${escapeHtml(order.order_number)} — total ${money(order.total_cents, order.currency)}.`,
-      bodyHtml,
+      bodyHtml: downloadsHtml + licenseHtml,
       footerNote: 'Your download links are valid for a limited time.',
     }),
-    text: `Order ${order.order_number}${free ? ' (free)' : ` — total ${money(order.total_cents, order.currency)}`}.\n${downloads.join('\n')}`,
+    text: `Order ${order.order_number}${free ? ' (free)' : ` — total ${money(order.total_cents, order.currency)}`}.\n${downloads.join('\n')}\n\nGoverned by the SonSoul License Agreement & Terms: ${licenseUrl}`,
   }).catch(() => {});
 }
 
