@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { storeApi, formatPrice, formatSecs, musicTypeLabel, styleLabel, type ProductDetail as PD, type Variant } from './storeApi'
 import { WaveformPlayer } from './WaveformPlayer'
 import { useCart } from './CartContext'
@@ -8,6 +8,15 @@ type Tab = 'overview' | 'details'
 
 function kindLabel(k: string | null): string | null {
   return k === 'one_shot' ? 'one-shot' : k === 'instrumental' ? 'beat' : k === 'loop' ? 'loop' : null
+}
+
+const TIER_ORDER = ['wav', 'stems', 'unlimited', 'exclusive', 'mp3']
+const TIER_INFO: Record<string, { label: string; blurb: string }> = {
+  wav: { label: 'WAV Lease', blurb: 'MP3 + WAV · up to 100k streams · 2 videos' },
+  stems: { label: 'Trackout / Stems', blurb: '+ stems & MIDI · 250k streams · 3 videos' },
+  unlimited: { label: 'Unlimited', blurb: 'No caps · all platforms' },
+  exclusive: { label: 'Exclusive', blurb: 'Sole rights · removed from the store' },
+  mp3: { label: 'MP3 Lease', blurb: 'MP3 only' },
 }
 
 export function ProductDetail() {
@@ -19,6 +28,7 @@ export function ProductDetail() {
   const [error, setError] = useState('')
   const [tab, setTab] = useState<Tab>('overview')
   const [variantId, setVariantId] = useState<number | null>(null)
+  const [tier, setTier] = useState<string | null>(null)
   const [qty, setQty] = useState(1)
   const [added, setAdded] = useState(false)
 
@@ -40,6 +50,8 @@ export function ProductDetail() {
         if (!alive) return
         setProduct(d.product)
         if (d.product.variants[0]) setVariantId(d.product.variants[0].id)
+        const cheapest = [...(d.product.licenseTiers ?? [])].sort((a, b) => a.price_cents - b.price_cents)[0]
+        if (cheapest) setTier(cheapest.tier)
       })
       .catch((e) => alive && setError(e instanceof Error ? e.message : 'Failed to load.'))
     return () => {
@@ -70,7 +82,19 @@ export function ProductDetail() {
     () => product?.variants.find((v) => v.id === variantId),
     [product, variantId],
   )
-  const unitCents = (product?.price_cents ?? 0) + (selectedVariant?.price_delta_cents ?? 0)
+  const sortedTiers = useMemo(() => {
+    return [...(product?.licenseTiers ?? [])].sort((a, b) => {
+      const oa = TIER_ORDER.indexOf(a.tier)
+      const ob = TIER_ORDER.indexOf(b.tier)
+      return (oa < 0 ? 9 : oa) - (ob < 0 ? 9 : ob)
+    })
+  }, [product])
+  const selectedTier = sortedTiers.find((t) => t.tier === tier)
+  // Music with a license ladder is priced by tier; everything else by base + variant.
+  const unitCents =
+    isMusic && selectedTier
+      ? selectedTier.price_cents
+      : (product?.price_cents ?? 0) + (selectedVariant?.price_delta_cents ?? 0)
   const outOfStock = Boolean(selectedVariant && selectedVariant.stock_qty <= 0)
   const needsVariant = Boolean(product && !isMusic && product.variants.length > 0 && !variantId)
 
@@ -85,6 +109,7 @@ export function ProductDetail() {
       isDigital: product.is_digital === 1,
       quantity: qty,
       variantId: selectedVariant?.id ?? null,
+      licenseTier: isMusic && selectedTier ? selectedTier.tier : null,
       variantLabel: selectedVariant
         ? [selectedVariant.size, selectedVariant.color, selectedVariant.style].filter(Boolean).join(' / ')
         : null,
@@ -121,6 +146,28 @@ export function ProductDetail() {
         <h1 className="pdetail__title">{product.title}</h1>
         {product.subtitle && <p className="pdetail__sub">{product.subtitle}</p>}
         <p className="pdetail__price">{formatPrice(unitCents, product.currency)}</p>
+
+        {isMusic && sortedTiers.length > 0 && (
+          <div className="pdetail__tiers">
+            <span className="pdetail__tiers-label">Choose a license</span>
+            {sortedTiers.map((t) => (
+              <button
+                key={t.tier}
+                type="button"
+                className={`pdetail__tier ${tier === t.tier ? 'is-active' : ''}`}
+                onClick={() => setTier(t.tier)}
+                aria-pressed={tier === t.tier}
+              >
+                <span className="pdetail__tier-top">
+                  <span className="pdetail__tier-name">{TIER_INFO[t.tier]?.label ?? t.tier}</span>
+                  <span className="pdetail__tier-price">{formatPrice(t.price_cents, product.currency)}</span>
+                </span>
+                <span className="pdetail__tier-blurb">{TIER_INFO[t.tier]?.blurb}</span>
+              </button>
+            ))}
+            <Link to="/store/terms#licenses" className="pdetail__tier-link">Full license terms →</Link>
+          </div>
+        )}
 
         {/* Clothing/accessory: variant + quantity */}
         {!isMusic && product.variants.length > 0 && (

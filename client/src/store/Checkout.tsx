@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { storeApi, formatPrice, type StoreConfig } from './storeApi'
+import { storeApi, formatPrice, licenseLabel, type StoreConfig } from './storeApi'
 import { useCart } from './CartContext'
 import { useAccount } from './account/AccountContext'
 
@@ -51,15 +51,18 @@ export function Checkout() {
   const isFree = cart.subtotalCents <= 0 && !hasPhysical && cart.items.length > 0
   const [claiming, setClaiming] = useState(false)
   const [email, setEmail] = useState(customer?.email ?? '')
+  const [agreed, setAgreed] = useState(false)
   const [ship, setShip] = useState({ name: '', line1: '', city: '', region: '', postal: '', country: '' })
 
   // Refs so the PayPal callbacks (rendered once) always read the latest values.
   const emailRef = useRef(email)
   const shipRef = useRef(ship)
   const itemsRef = useRef(cart.items)
+  const agreedRef = useRef(agreed)
   emailRef.current = email
   shipRef.current = ship
   itemsRef.current = cart.items
+  agreedRef.current = agreed
 
   const containerRef = useRef<HTMLDivElement>(null)
   const renderedRef = useRef(false)
@@ -76,6 +79,10 @@ export function Checkout() {
     setError('')
     if (!validEmail(email)) {
       setError('Enter a valid email for your downloads.')
+      return
+    }
+    if (!agreed) {
+      setError('Please agree to the terms and license before continuing.')
       return
     }
     setClaiming(true)
@@ -110,6 +117,10 @@ export function Checkout() {
               if (!validEmail(emailRef.current)) {
                 setError('Enter a valid email for your receipt & downloads.')
                 throw new Error('email')
+              }
+              if (!agreedRef.current) {
+                setError('Please agree to the terms and license before continuing.')
+                throw new Error('agree')
               }
               const s = shipRef.current
               const shipping = hasPhysical
@@ -194,15 +205,26 @@ export function Checkout() {
             </fieldset>
           )}
 
+          <label className="checkout__agree">
+            <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+            <span>
+              I have read and agree to the{' '}
+              <Link to="/store/terms">Terms</Link>,{' '}
+              <Link to="/store/terms#refund">Refund Policy</Link>, and the applicable{' '}
+              <Link to="/store/terms#licenses">License Agreement</Link> for the items in my order.
+            </span>
+          </label>
+
           {error && <p className="checkout__error" role="alert">{error}</p>}
           {isFree ? (
-            <button type="button" className="st__btn checkout__free-btn" onClick={claimFree} disabled={claiming}>
+            <button type="button" className="st__btn checkout__free-btn" onClick={claimFree} disabled={claiming || !agreed}>
               {claiming ? 'Preparing your download…' : 'Get it free'}
             </button>
           ) : (
             <>
               <div ref={containerRef} className="checkout__paypal" />
               {!config && <p className="state">Loading payment…</p>}
+              {!agreed && <p className="checkout__note">Please agree to the terms above to enable payment.</p>}
             </>
           )}
         </div>
@@ -212,7 +234,10 @@ export function Checkout() {
           <ul>
             {cart.items.map((i, idx) => (
               <li key={idx}>
-                <span>{i.title}{i.variantLabel ? ` (${i.variantLabel})` : ''} × {i.quantity}</span>
+                <span>
+                  {i.title}{i.variantLabel ? ` (${i.variantLabel})` : ''} × {i.quantity}
+                  {i.licenseTier && <small className="checkout__license"> · {licenseLabel(i.licenseTier)}</small>}
+                </span>
                 <span>{formatPrice(i.unitCents * i.quantity, i.currency)}</span>
               </li>
             ))}

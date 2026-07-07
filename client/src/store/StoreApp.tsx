@@ -12,6 +12,8 @@ import { Login } from './account/Login'
 import { Register } from './account/Register'
 import { Forgot } from './account/Forgot'
 import { Dashboard } from './account/Dashboard'
+import { Terms } from './Terms'
+import { Link } from 'react-router-dom'
 
 export default function StoreApp() {
   return (
@@ -28,6 +30,7 @@ export default function StoreApp() {
               <Route path="product/:slug" element={<ProductDetail />} />
               <Route path="cart" element={<Cart />} />
               <Route path="checkout" element={<Checkout />} />
+              <Route path="terms" element={<Terms />} />
               <Route path="account" element={<Dashboard />} />
               <Route path="account/login" element={<Login />} />
               <Route path="account/register" element={<Register />} />
@@ -35,6 +38,15 @@ export default function StoreApp() {
               <Route path="*" element={<Navigate to="music" replace />} />
             </Routes>
           </main>
+          <footer className="st__footer">
+            <span>© {new Date().getFullYear()} SonSoul · Gabriel Elyth Gomez</span>
+            <nav className="st__footer-links">
+              <Link to="/store/terms">Terms</Link>
+              <Link to="/store/terms#licenses">Licenses</Link>
+              <Link to="/store/terms#refund">Refunds</Link>
+              <Link to="/store/terms#privacy">Privacy</Link>
+            </nav>
+          </footer>
         </div>
       </CartProvider>
     </AccountProvider>

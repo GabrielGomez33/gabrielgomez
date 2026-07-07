@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAccount } from './AccountContext'
 import { accountApi, ApiError, type Order, type DownloadItem } from './accountApi'
-import { formatPrice } from '../storeApi'
+import { formatPrice, licenseLabel } from '../storeApi'
 
 export function Dashboard() {
   const { customer, loading, logout } = useAccount()
@@ -106,8 +106,10 @@ export function Dashboard() {
                 <ul className="acc-order__items">
                   {o.items.map((it, i) => (
                     <li key={i}>
-                      {it.title_snapshot}
-                      {it.license_tier ? ` (${it.license_tier})` : ''} × {it.quantity}
+                      {it.title_snapshot} × {it.quantity}
+                      {it.license_tier && (
+                        <span className="acc-order__license"> · Licensed under {licenseLabel(it.license_tier)}</span>
+                      )}
                     </li>
                   ))}
                 </ul>

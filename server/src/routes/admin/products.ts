@@ -167,8 +167,8 @@ router.post('/:id/tiers', async (req: Request, res: Response): Promise<void> => 
     return;
   }
   const tier = req.body?.tier as products.LicenseTier;
-  if (!['mp3', 'wav', 'stems', 'exclusive'].includes(tier)) {
-    res.status(400).json({ success: false, error: 'tier must be mp3 | wav | stems | exclusive.' });
+  if (!['mp3', 'wav', 'stems', 'unlimited', 'exclusive'].includes(tier)) {
+    res.status(400).json({ success: false, error: 'tier must be wav | stems | unlimited | exclusive.' });
     return;
   }
   await products.addLicenseTier(id, tier, Number(req.body?.priceCents) || 0);

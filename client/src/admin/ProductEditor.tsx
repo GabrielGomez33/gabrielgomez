@@ -7,7 +7,14 @@ const TYPES: Record<string, string[]> = {
   clothing: ['shirt', 'pants', 'socks'],
   accessory: ['accessory', 'hat', 'bag', 'other'],
 }
-const TIERS = ['mp3', 'wav', 'stems', 'exclusive'] as const
+const TIERS = ['wav', 'stems', 'unlimited', 'exclusive'] as const
+// Standard SonSoul license ladder (dollars). Stems is optional per beat (legacy).
+const STANDARD_TIERS: { tier: string; label: string; price: number }[] = [
+  { tier: 'wav', label: 'WAV Lease', price: 150 },
+  { tier: 'stems', label: 'Trackout / Stems', price: 200 },
+  { tier: 'unlimited', label: 'Unlimited', price: 250 },
+  { tier: 'exclusive', label: 'Exclusive', price: 600 },
+]
 
 function fmtSecs(s: number | null): string {
   if (!s) return '—'
@@ -598,29 +605,57 @@ function TierEditor({
   tiers: Array<Record<string, unknown>>
   onDone: () => Promise<void>
 }) {
-  const [tier, setTier] = useState<string>('mp3')
+  const [tier, setTier] = useState<string>('wav')
   const [price, setPrice] = useState('')
+  const [busy, setBusy] = useState(false)
+  const have = new Set(tiers.map((t) => String(t.tier)))
+
   async function add() {
     await adminApi.addTier(productId, tier, Math.round((parseFloat(price) || 0) * 100))
     setPrice('')
     await onDone()
   }
+  async function seedStandard() {
+    setBusy(true)
+    try {
+      // Add any missing standard tiers at their default prices; skip Stems if the
+      // beat has no trackouts and existing tiers untouched.
+      for (const s of STANDARD_TIERS) {
+        if (!have.has(s.tier)) await adminApi.addTier(productId, s.tier, s.price * 100)
+      }
+      await onDone()
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <section className="adm-section">
-      <h3>License tiers (optional)</h3>
-      {tiers.length > 0 && (
+      <h3>License tiers</h3>
+      <p className="adm-muted">
+        Standard ladder: WAV $150 · Trackout/Stems $200 · Unlimited $250 · Exclusive $600.
+        For a legacy beat with no stems, just delete the Stems tier after seeding.
+      </p>
+      {tiers.length > 0 ? (
         <ul className="adm-inline-list">
           {tiers.map((t, i) => (
             <li key={i}>{String(t.tier)} — ${((Number(t.price_cents) || 0) / 100).toFixed(2)}</li>
           ))}
         </ul>
+      ) : (
+        <p className="adm-muted">No tiers yet — seed the standard ladder or add them individually.</p>
       )}
       <div className="adm-inline">
+        <button className="adm-btn adm-btn--primary" onClick={seedStandard} disabled={busy}>
+          {busy ? 'Adding…' : 'Add standard licenses'}
+        </button>
+      </div>
+      <div className="adm-inline" style={{ marginTop: '0.6rem' }}>
         <select value={tier} onChange={(e) => setTier(e.target.value)}>
           {TIERS.map((t) => (<option key={t} value={t}>{t}</option>))}
         </select>
         <input type="number" step="0.01" placeholder="Price" value={price} onChange={(e) => setPrice(e.target.value)} />
-        <button className="adm-btn" onClick={add}>Add tier</button>
+        <button className="adm-btn" onClick={add}>Add / update tier</button>
       </div>
     </section>
   )
