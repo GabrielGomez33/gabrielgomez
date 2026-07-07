@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { storeApi, formatPrice, type StoreConfig } from './storeApi'
+import { storeApi, formatPrice, licenseLabel, type StoreConfig } from './storeApi'
 import { useCart } from './CartContext'
 import { useAccount } from './account/AccountContext'
 
@@ -234,7 +234,10 @@ export function Checkout() {
           <ul>
             {cart.items.map((i, idx) => (
               <li key={idx}>
-                <span>{i.title}{i.variantLabel ? ` (${i.variantLabel})` : ''} × {i.quantity}</span>
+                <span>
+                  {i.title}{i.variantLabel ? ` (${i.variantLabel})` : ''} × {i.quantity}
+                  {i.licenseTier && <small className="checkout__license"> · {licenseLabel(i.licenseTier)}</small>}
+                </span>
                 <span>{formatPrice(i.unitCents * i.quantity, i.currency)}</span>
               </li>
             ))}

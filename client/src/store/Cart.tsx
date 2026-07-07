@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useCart, itemKey } from './CartContext'
-import { formatPrice } from './storeApi'
+import { formatPrice, licenseLabel } from './storeApi'
 
 export function Cart() {
   const cart = useCart()
@@ -29,7 +29,7 @@ export function Cart() {
               <div className="cartline__info">
                 <span className="cartline__title">{it.title}</span>
                 {it.variantLabel && <span className="cartline__variant">{it.variantLabel}</span>}
-                {it.licenseTier && <span className="cartline__variant">{it.licenseTier} license</span>}
+                {it.licenseTier && <span className="cartline__license">Licensed under {licenseLabel(it.licenseTier)}</span>}
                 <span className="cartline__unit">{formatPrice(it.unitCents, it.currency)}</span>
               </div>
               <div className="cartline__controls">

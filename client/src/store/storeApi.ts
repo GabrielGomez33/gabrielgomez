@@ -134,6 +134,19 @@ export function formatPrice(cents: number, currency = 'USD'): string {
  * its style (instruments = beat/instrumental, vocal/mixed = song with lyrics) —
  * that's the song-vs-beat distinction, not anything derived from length.
  */
+/** Human label for a license tier (shown in cart, checkout, and order history). */
+export function licenseLabel(tier?: string | null): string | null {
+  if (!tier) return null
+  const map: Record<string, string> = {
+    wav: 'WAV Lease',
+    stems: 'Trackout / Stems',
+    unlimited: 'Unlimited Lease',
+    exclusive: 'Exclusive License',
+    mp3: 'MP3 Lease',
+  }
+  return map[tier] ?? tier
+}
+
 /** Display label for a music style value ('instruments' reads as 'Instrumental'). */
 export function styleLabel(style?: string | null): string {
   if (!style) return ''

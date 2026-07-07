@@ -110,12 +110,9 @@ export function ProductDetail() {
       quantity: qty,
       variantId: selectedVariant?.id ?? null,
       licenseTier: isMusic && selectedTier ? selectedTier.tier : null,
-      variantLabel:
-        isMusic && selectedTier
-          ? TIER_INFO[selectedTier.tier]?.label ?? selectedTier.tier
-          : selectedVariant
-            ? [selectedVariant.size, selectedVariant.color, selectedVariant.style].filter(Boolean).join(' / ')
-            : null,
+      variantLabel: selectedVariant
+        ? [selectedVariant.size, selectedVariant.color, selectedVariant.style].filter(Boolean).join(' / ')
+        : null,
       coverUrl: product.coverUrl,
     })
     setAdded(true)
