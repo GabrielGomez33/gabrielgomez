@@ -132,6 +132,20 @@
 
 .adm-reanalyze { margin-top: 1rem; }
 
+/* Processing / pending spinner */
+.adm-spin-wrap { display: inline-flex; align-items: center; gap: 0.6rem; margin-top: 0.6rem; }
+.adm-spinner {
+  width: 1.05em; height: 1.05em; flex: none; border-radius: 50%;
+  border: 2px solid var(--line-strong); border-top-color: var(--white);
+  animation: adm-spin 0.7s linear infinite;
+}
+.adm-spin-label { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.06em; color: var(--mist); }
+/* Inside a button the spinner should sit centered with no top margin. */
+.adm-btn .adm-spin-wrap { margin-top: 0; }
+.adm-btn .adm-spin-label { color: inherit; }
+@keyframes adm-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .adm-spinner { animation-duration: 1.6s; } }
+
 /* Create-form license ladder */
 .adm-ladder { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.4rem; }
 .adm-ladder__row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid var(--line); border-radius: 8px; padding: 0.5rem 0.7rem; }

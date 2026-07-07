@@ -66,6 +66,16 @@ export async function readDroppedFiles(dt: DataTransfer): Promise<File[]> {
   return Array.from(dt.files || [])
 }
 
+// A small spinning wheel for pending/processing states.
+export function Spinner({ label }: { label?: string }) {
+  return (
+    <span className="adm-spin-wrap" role="status" aria-live="polite">
+      <span className="adm-spinner" aria-hidden />
+      {label && <span className="adm-spin-label">{label}</span>}
+    </span>
+  )
+}
+
 interface FileDropProps {
   label: string
   accept?: string
