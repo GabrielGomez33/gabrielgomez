@@ -398,8 +398,10 @@ router.post('/:id/tracks/:trackId/preview', async (req: Request, res: Response):
 });
 
 // --- Stems / trackouts upload ------------------------------------------------
-// Stems land in masters/stems/ and are delivered only for Stems/Unlimited/
-// Exclusive tiers. Uploading any stems marks the product stems_available = 1.
+// Stems land in masters/stems/<group>/ and are delivered only for Stems/
+// Unlimited/Exclusive tiers. Each stem is analyzed (same as all music — kind,
+// group, BPM, key) and sorted into a group folder with a self-describing name,
+// so the downloaded stems arrive organized. Uploading marks stems_available = 1.
 router.post('/:id/stems', upload.array('files', MAX_FILES), async (req: Request, res: Response): Promise<void> => {
   const id = Number(req.params.id);
   const files = (req.files as Express.Multer.File[] | undefined) ?? [];
@@ -415,9 +417,10 @@ router.post('/:id/stems', upload.array('files', MAX_FILES), async (req: Request,
     res.status(400).json({ success: false, error: 'No audio stem files uploaded.' });
     return;
   }
-  const stemsDir = path.join(productDir(id), 'masters', 'stems');
-  ensureDir(stemsDir);
-  let added = 0;
+  const stemsBase = path.join(productDir(id), 'masters', 'stems');
+  ensureDir(stemsBase);
+  const added: Array<Record<string, unknown>> = [];
+
   for (const f of files) {
     const ext = path.extname(f.originalname).toLowerCase();
     if (!AUDIO_EXT.has(ext)) {
@@ -428,12 +431,59 @@ router.post('/:id/stems', upload.array('files', MAX_FILES), async (req: Request,
       }
       continue;
     }
-    const dest = path.join(stemsDir, uniqueInDir(stemsDir, safeName(f.originalname)));
-    fs.renameSync(f.path, dest);
-    added += 1;
+    // Analyze from the incoming file (ffprobe + heuristics + DSP).
+    let durationSec: number | null = null;
+    try {
+      durationSec = (await probe(f.path)).durationSec;
+    } catch {
+      /* non-fatal */
+    }
+    const analysis = await analyzeAudio({
+      filename: f.originalname,
+      durationSec,
+      absFile: f.path,
+      useDsp: DSP_ENABLED,
+    });
+    // Sort into a group folder with a self-describing (BPM/key) name.
+    const group = analysis.group || 'other';
+    const destDir = path.join(stemsBase, group);
+    ensureDir(destDir);
+    const finalName = uniqueInDir(destDir, sampleMasterFilename(f.originalname, analysis));
+    fs.renameSync(f.path, path.join(destDir, finalName));
+    added.push({
+      name: finalName,
+      group,
+      category: analysis.category,
+      kind: analysis.kind,
+      bpm: analysis.bpm,
+      key: analysis.key,
+    });
   }
+
   await products.updateProduct(id, { stemsAvailable: 1 });
   res.status(201).json({ success: true, added, stemsAvailable: 1 });
+});
+
+// List the stems currently stored for a product (walked from disk, grouped).
+router.get('/:id/stems', async (req: Request, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  const base = path.join(productDir(id), 'masters', 'stems');
+  const stems: Array<{ group: string; name: string }> = [];
+  if (fs.existsSync(base)) {
+    for (const entry of fs.readdirSync(base)) {
+      const abs = path.join(base, entry);
+      try {
+        if (fs.statSync(abs).isDirectory()) {
+          for (const file of fs.readdirSync(abs)) stems.push({ group: entry, name: file });
+        } else {
+          stems.push({ group: 'other', name: entry });
+        }
+      } catch {
+        /* skip unreadable */
+      }
+    }
+  }
+  res.json({ success: true, stems });
 });
 
 // Flag a product as having no stems available (legacy) — greys out the Stems tier.

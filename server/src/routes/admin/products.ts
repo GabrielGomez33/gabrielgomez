@@ -80,17 +80,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   if (b.category === 'music' && (b.genre || b.style || b.notes)) {
     await products.setMusicMeta(id, { genre: b.genre ?? null, style: b.style ?? null, notes: b.notes ?? null });
   }
-  // Individual beats (singles) get the standard license ladder seeded up front —
-  // the license tiers are part of the first phase of adding a product.
-  if (b.category === 'music' && String(b.type).trim() === 'single') {
-    const ladder: Array<[products.LicenseTier, number]> = [
-      ['wav', 15000],
-      ['stems', 20000],
-      ['unlimited', 25000],
-      ['exclusive', 60000],
-    ];
-    for (const [tier, cents] of ladder) await products.addLicenseTier(id, tier, cents);
-  }
   const row = await products.getProductById(id);
   res.status(201).json({ success: true, product: row ? await products.getFullProduct(row) : null });
 });

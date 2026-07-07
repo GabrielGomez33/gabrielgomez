@@ -49,6 +49,16 @@ export function ProductEditor() {
   const [description, setDescription] = useState('')
   const [price, setPrice] = useState('')
 
+  // License ladder collected on the create form for singles (replaces Price).
+  const [tierPrices, setTierPrices] = useState<Record<string, string>>({
+    wav: '150',
+    stems: '200',
+    unlimited: '250',
+    exclusive: '600',
+  })
+  const [noStemsOnCreate, setNoStemsOnCreate] = useState(false)
+  const [stems, setStems] = useState<{ group: string; name: string }[]>([])
+
   // Music meta
   const [genre, setGenre] = useState('')
   const [style, setStyle] = useState('')
@@ -92,13 +102,35 @@ export function ProductEditor() {
     loadProduct().catch((e) => setError(e instanceof Error ? e.message : 'Load failed.'))
   }, [loadProduct])
 
+  const loadStems = useMemo(
+    () => async () => {
+      if (!id) return
+      try {
+        const r = await adminApi.listStems(Number(id))
+        setStems(r.stems)
+      } catch {
+        /* non-fatal */
+      }
+    },
+    [id],
+  )
+  useEffect(() => {
+    if (id && product?.category === 'music' && product?.type === 'single') loadStems()
+  }, [id, product?.category, product?.type, loadStems])
+
   async function saveBasic(e: React.FormEvent) {
     e.preventDefault()
     setBusy(true)
     setError('')
     setMsg('')
     try {
-      const priceCents = Math.round((parseFloat(price) || 0) * 100)
+      const single = category === 'music' && type === 'single'
+      // On CREATE a single is priced by the ladder (base = WAV lease); on EDIT the
+      // base is whatever was loaded (tiers are managed in the License tiers section).
+      const priceCents =
+        single && !editing
+          ? Math.round((parseFloat(tierPrices.wav) || 0) * 100)
+          : Math.round((parseFloat(price) || 0) * 100)
       if (editing) {
         await adminApi.updateProduct(Number(id), { title, subtitle, description, priceCents })
         if (category === 'music') await adminApi.setMusicMeta(Number(id), { genre, style, notes })
@@ -114,6 +146,13 @@ export function ProductEditor() {
           priceCents,
           ...(category === 'music' ? { genre, style, notes } : {}),
         })
+        // Seed the license ladder from the create form (singles only).
+        if (single) {
+          for (const t of ['wav', 'stems', 'unlimited', 'exclusive'] as const) {
+            await adminApi.addTier(p.id, t, Math.round((parseFloat(tierPrices[t]) || 0) * 100))
+          }
+          if (noStemsOnCreate) await adminApi.flagNoStems(p.id)
+        }
         navigate(`/admin/${p.id}`)
       }
     } catch (err) {
@@ -168,8 +207,10 @@ export function ProductEditor() {
     setMsg('')
     try {
       const r = await adminApi.uploadStems(Number(id), Array.from(files))
-      setMsg(`${r.added} stem${r.added === 1 ? '' : 's'} uploaded. The Trackout/Stems tier is now available.`)
+      const n = r.added?.length ?? 0
+      setMsg(`${n} stem${n === 1 ? '' : 's'} uploaded, analyzed & sorted. The Trackout/Stems tier is now available.`)
       await loadProduct().catch(() => {})
+      await loadStems()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Stems upload failed.')
     } finally {
@@ -244,14 +285,13 @@ export function ProductEditor() {
 
   const isMusic = category === 'music'
   const isSamplePack = isMusic && type === 'samplepack'
+  const isSingle = isMusic && type === 'single'
 
-  // All metadata fields are mandatory. Music additionally needs genre/style/notes.
+  // All metadata fields are mandatory. Music additionally needs genre/style.
+  // Singles are priced by the ladder (WAV lease); everything else by base price.
+  const priceOk = isSingle ? parseFloat(tierPrices.wav) > 0 : parseFloat(price) > 0
   const basicComplete = Boolean(
-    title.trim() &&
-      subtitle.trim() &&
-      description.trim() &&
-      parseFloat(price) > 0 &&
-      (!isMusic || (genre && style)),
+    title.trim() && subtitle.trim() && description.trim() && priceOk && (!isMusic || (genre && style)),
   )
   // Publishing additionally requires a cover and real content.
   const hasCover = Boolean(product?.cover_image_path)
@@ -314,10 +354,40 @@ export function ProductEditor() {
           <span>Description</span>
           <textarea rows={4} value={description} onChange={(e) => setDescription(e.target.value)} required />
         </label>
-        <label className="adm-field">
-          <span>Price (USD)</span>
-          <input type="number" step="0.01" min="0.01" value={price} onChange={(e) => setPrice(e.target.value)} required />
-        </label>
+        {isSingle && !editing ? (
+          <div className="adm-field">
+            <span>License prices (USD)</span>
+            <div className="adm-ladder">
+              {(['wav', 'stems', 'unlimited', 'exclusive'] as const).map((t) => (
+                <label key={t} className="adm-ladder__row">
+                  <span>
+                    {t === 'wav' ? 'WAV Lease' : t === 'stems' ? 'Trackout / Stems' : t === 'unlimited' ? 'Unlimited' : 'Exclusive'}
+                    {t === 'stems' && noStemsOnCreate ? ' (unavailable)' : ''}
+                  </span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={tierPrices[t]}
+                    onChange={(e) => setTierPrices({ ...tierPrices, [t]: e.target.value })}
+                  />
+                </label>
+              ))}
+            </div>
+            <label className="adm-check">
+              <input type="checkbox" checked={noStemsOnCreate} onChange={(e) => setNoStemsOnCreate(e.target.checked)} />
+              <span>No stems available for this beat (legacy) — the Stems tier will be greyed out in the store.</span>
+            </label>
+            <p className="adm-muted">These become the license ladder. You can fine-tune them (and upload stems) after creating.</p>
+          </div>
+        ) : isSingle ? (
+          <p className="adm-muted">Licensing &amp; stems are managed in the sections below.</p>
+        ) : (
+          <label className="adm-field">
+            <span>Price (USD)</span>
+            <input type="number" step="0.01" min="0.01" value={price} onChange={(e) => setPrice(e.target.value)} required />
+          </label>
+        )}
 
         {isMusic && (
           <div className="adm-grid2">
@@ -375,6 +445,10 @@ export function ProductEditor() {
                     ? 'Flagged: no stems available. The Stems tier is greyed out in the store.'
                     : 'No stems yet — upload them, or flag this beat as having none. Until then the Stems tier is unavailable.'}
               </p>
+              <p className="adm-muted">
+                Every stem is analyzed (BPM, key, type) and sorted into a group folder with a
+                self-describing name, so buyers get an organized trackout on stem-tier purchases.
+              </p>
               <div className="adm-uploads">
                 <label className="adm-drop">
                   <span>Upload stem files</span>
@@ -385,6 +459,25 @@ export function ProductEditor() {
                 <button className="adm-btn" onClick={handleNoStems} disabled={busy} style={{ marginTop: '0.6rem' }}>
                   No stems available (legacy)
                 </button>
+              )}
+              {stems.length > 0 && (
+                <div className="adm-stems">
+                  {Object.entries(
+                    stems.reduce<Record<string, string[]>>((acc, s) => {
+                      ;(acc[s.group] ||= []).push(s.name)
+                      return acc
+                    }, {}),
+                  ).map(([group, names]) => (
+                    <div key={group} className="adm-samplegroup">
+                      <h4 className="adm-samplegroup__title">{group} <span>({names.length})</span></h4>
+                      <ul className="adm-inline-list">
+                        {names.map((n, i) => (
+                          <li key={i}>{n}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
               )}
             </section>
           )}
