@@ -197,13 +197,16 @@ export const adminApi = {
     if (!res.ok) throw new Error((data as { error?: string }).error || 'Cover upload failed')
     return data
   },
-  async uploadStems(id: number, files: File[]): Promise<{ added: number }> {
+  async uploadStems(id: number, files: File[]): Promise<{ added: Array<Record<string, unknown>> }> {
     const fd = new FormData()
     for (const f of files) fd.append('files', f)
     const res = await fetch(`${BASE}/admin/products/${id}/stems`, { method: 'POST', headers: authHeader(), body: fd })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error((data as { error?: string }).error || 'Stems upload failed')
-    return data as { added: number }
+    return data as { added: Array<Record<string, unknown>> }
+  },
+  listStems(id: number): Promise<{ stems: { group: string; name: string }[] }> {
+    return jsonReq(`/admin/products/${id}/stems`, 'GET')
   },
   flagNoStems(id: number): Promise<unknown> {
     return jsonReq(`/admin/products/${id}/stems/none`, 'POST')
