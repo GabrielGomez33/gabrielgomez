@@ -145,26 +145,39 @@ export function ProductDetail() {
         </p>
         <h1 className="pdetail__title">{product.title}</h1>
         {product.subtitle && <p className="pdetail__sub">{product.subtitle}</p>}
-        <p className="pdetail__price">{formatPrice(unitCents, product.currency)}</p>
+
+        {/* Base price only when there is no license ladder (the ladder is the price). */}
+        {!(isMusic && sortedTiers.length > 0) && (
+          <p className="pdetail__price">{formatPrice(unitCents, product.currency)}</p>
+        )}
 
         {isMusic && sortedTiers.length > 0 && (
           <div className="pdetail__tiers">
             <span className="pdetail__tiers-label">Choose a license</span>
-            {sortedTiers.map((t) => (
-              <button
-                key={t.tier}
-                type="button"
-                className={`pdetail__tier ${tier === t.tier ? 'is-active' : ''}`}
-                onClick={() => setTier(t.tier)}
-                aria-pressed={tier === t.tier}
-              >
-                <span className="pdetail__tier-top">
-                  <span className="pdetail__tier-name">{TIER_INFO[t.tier]?.label ?? t.tier}</span>
-                  <span className="pdetail__tier-price">{formatPrice(t.price_cents, product.currency)}</span>
-                </span>
-                <span className="pdetail__tier-blurb">{TIER_INFO[t.tier]?.blurb}</span>
-              </button>
-            ))}
+            {sortedTiers.map((t) => {
+              // Stems tier is unavailable unless stems have been uploaded for this beat.
+              const stemsBlocked = t.tier === 'stems' && product.stems_available !== 1
+              return (
+                <button
+                  key={t.tier}
+                  type="button"
+                  className={`pdetail__tier ${tier === t.tier ? 'is-active' : ''} ${stemsBlocked ? 'is-unavailable' : ''}`}
+                  onClick={() => !stemsBlocked && setTier(t.tier)}
+                  disabled={stemsBlocked}
+                  aria-pressed={tier === t.tier}
+                >
+                  <span className="pdetail__tier-top">
+                    <span className="pdetail__tier-name">{TIER_INFO[t.tier]?.label ?? t.tier}</span>
+                    <span className="pdetail__tier-price">
+                      {stemsBlocked ? 'Unavailable' : formatPrice(t.price_cents, product.currency)}
+                    </span>
+                  </span>
+                  <span className="pdetail__tier-blurb">
+                    {stemsBlocked ? 'No trackout/stems available for this beat' : TIER_INFO[t.tier]?.blurb}
+                  </span>
+                </button>
+              )
+            })}
             <Link to="/store/terms#licenses" className="pdetail__tier-link">Full license terms →</Link>
           </div>
         )}

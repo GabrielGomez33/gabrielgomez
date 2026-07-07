@@ -397,6 +397,57 @@ router.post('/:id/tracks/:trackId/preview', async (req: Request, res: Response):
   res.json({ success: true, previewCount: await products.getPreviewCount(id) });
 });
 
+// --- Stems / trackouts upload ------------------------------------------------
+// Stems land in masters/stems/ and are delivered only for Stems/Unlimited/
+// Exclusive tiers. Uploading any stems marks the product stems_available = 1.
+router.post('/:id/stems', upload.array('files', MAX_FILES), async (req: Request, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+  const product = await products.getProductById(id);
+  if (!product || product.category !== 'music') {
+    cleanup(files);
+    res.status(404).json({ success: false, error: 'Music product not found.' });
+    return;
+  }
+  const audio = files.filter((f) => AUDIO_EXT.has(path.extname(f.originalname).toLowerCase()));
+  if (audio.length === 0) {
+    cleanup(files);
+    res.status(400).json({ success: false, error: 'No audio stem files uploaded.' });
+    return;
+  }
+  const stemsDir = path.join(productDir(id), 'masters', 'stems');
+  ensureDir(stemsDir);
+  let added = 0;
+  for (const f of files) {
+    const ext = path.extname(f.originalname).toLowerCase();
+    if (!AUDIO_EXT.has(ext)) {
+      try {
+        fs.unlinkSync(f.path);
+      } catch {
+        /* ignore */
+      }
+      continue;
+    }
+    const dest = path.join(stemsDir, uniqueInDir(stemsDir, safeName(f.originalname)));
+    fs.renameSync(f.path, dest);
+    added += 1;
+  }
+  await products.updateProduct(id, { stemsAvailable: 1 });
+  res.status(201).json({ success: true, added, stemsAvailable: 1 });
+});
+
+// Flag a product as having no stems available (legacy) — greys out the Stems tier.
+router.post('/:id/stems/none', async (req: Request, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  const product = await products.getProductById(id);
+  if (!product || product.category !== 'music') {
+    res.status(404).json({ success: false, error: 'Music product not found.' });
+    return;
+  }
+  await products.updateProduct(id, { stemsAvailable: 0 });
+  res.json({ success: true, stemsAvailable: 0 });
+});
+
 // --- Delete a single track (removes its master + preview files) --------------
 router.delete('/:id/tracks/:trackId', async (req: Request, res: Response): Promise<void> => {
   const id = Number(req.params.id);

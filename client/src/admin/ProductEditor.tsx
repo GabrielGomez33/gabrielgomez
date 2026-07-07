@@ -161,6 +161,37 @@ export function ProductEditor() {
     }
   }
 
+  async function handleStems(files: FileList | null) {
+    if (!files || !id || files.length === 0) return
+    setBusy(true)
+    setError('')
+    setMsg('')
+    try {
+      const r = await adminApi.uploadStems(Number(id), Array.from(files))
+      setMsg(`${r.added} stem${r.added === 1 ? '' : 's'} uploaded. The Trackout/Stems tier is now available.`)
+      await loadProduct().catch(() => {})
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Stems upload failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleNoStems() {
+    if (!id || !confirm('Flag this beat as having NO stems available? The Trackout/Stems tier will be greyed out in the store.')) return
+    setBusy(true)
+    setError('')
+    try {
+      await adminApi.flagNoStems(Number(id))
+      setMsg('Flagged: no stems available. The Stems tier is greyed out in the store.')
+      await loadProduct().catch(() => {})
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to flag.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function handleDeleteTrack(trackId: number) {
     if (!id || !confirm('Delete this track and its files?')) return
     setBusy(true)
@@ -328,6 +359,36 @@ export function ProductEditor() {
 
       {editing && product && (
         <>
+          {/* License ladder — first thing after the basics for music. */}
+          {isMusic && (
+            <TierEditor productId={product.id} tiers={product.licenseTiers ?? []} onDone={loadProduct} />
+          )}
+
+          {/* Stems / trackouts (individual beats). Feeds the Stems/Unlimited/Exclusive tiers. */}
+          {isMusic && type === 'single' && (
+            <section className="adm-section">
+              <h3>Stems / trackouts</h3>
+              <p className={product.stems_available === 1 ? 'adm-ok' : 'adm-muted'}>
+                {product.stems_available === 1
+                  ? 'Stems uploaded — the Trackout/Stems tier is available in the store.'
+                  : product.stems_available === 0
+                    ? 'Flagged: no stems available. The Stems tier is greyed out in the store.'
+                    : 'No stems yet — upload them, or flag this beat as having none. Until then the Stems tier is unavailable.'}
+              </p>
+              <div className="adm-uploads">
+                <label className="adm-drop">
+                  <span>Upload stem files</span>
+                  <input type="file" accept="audio/*" multiple onChange={(e) => handleStems(e.target.files)} />
+                </label>
+              </div>
+              {product.stems_available !== 0 && (
+                <button className="adm-btn" onClick={handleNoStems} disabled={busy} style={{ marginTop: '0.6rem' }}>
+                  No stems available (legacy)
+                </button>
+              )}
+            </section>
+          )}
+
           {/* Cover */}
           <section className="adm-section">
             <h3>Cover image</h3>
@@ -441,8 +502,6 @@ export function ProductEditor() {
                   )}
                 </section>
               )}
-
-              <TierEditor productId={product.id} tiers={product.licenseTiers ?? []} onDone={loadProduct} />
             </>
           )}
 

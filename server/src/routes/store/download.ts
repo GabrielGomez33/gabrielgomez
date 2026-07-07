@@ -1,5 +1,5 @@
 import express, { type Request, type Response } from 'express';
-import { getGrantByToken, claimDownload, streamZip } from '../../services/delivery';
+import { getGrantByToken, claimDownload, streamZip, tierIncludesStems } from '../../services/delivery';
 
 // =============================================================================
 // Secure download. Validates the grant (exists, not expired, count remaining),
@@ -37,7 +37,9 @@ router.get('/download/:token', async (req: Request, res: Response): Promise<void
     return;
   }
 
-  streamZip(res, grant.file_path, `sonsoul-${token.slice(0, 8)}`);
+  // WAV leases never receive the stems/ folder; higher tiers (and non-tiered
+  // products like sample packs) do.
+  streamZip(res, grant.file_path, `sonsoul-${token.slice(0, 8)}`, tierIncludesStems(grant.license_tier));
 });
 
 export default router;

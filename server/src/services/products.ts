@@ -22,6 +22,7 @@ export interface ProductRow extends RowDataPacket {
   currency: string;
   status: Status;
   is_digital: number;
+  stems_available: number | null;
   cover_image_path: string | null;
   cover_thumb_path: string | null;
   weight_grams: number | null;
@@ -137,6 +138,7 @@ const UPDATABLE: Record<string, string> = {
   weightGrams: 'weight_grams',
   coverImagePath: 'cover_image_path',
   coverThumbPath: 'cover_thumb_path',
+  stemsAvailable: 'stems_available',
   sku: 'sku',
 };
 
