@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { adminApi, type Product, type AttrOption, type Variant } from './adminApi'
+import { FileDrop } from './FileDrop'
 
 const TYPES: Record<string, string[]> = {
   music: ['beatpack', 'single', 'album', 'samplepack'],
@@ -64,20 +65,11 @@ export function ProductEditor() {
   const [style, setStyle] = useState('')
   const [notes, setNotes] = useState('')
 
-  const folderRef = useRef<HTMLInputElement>(null)
-
   const opts = (kind: string) => options.filter((o) => o.kind === kind)
 
   useEffect(() => {
     adminApi.options().then(setOptions).catch(() => {})
   }, [])
-
-  useEffect(() => {
-    if (folderRef.current) {
-      folderRef.current.setAttribute('webkitdirectory', '')
-      folderRef.current.setAttribute('directory', '')
-    }
-  }, [product])
 
   const loadProduct = useMemo(
     () => async () => {
@@ -162,13 +154,13 @@ export function ProductEditor() {
     }
   }
 
-  async function handleAudio(files: FileList | null) {
+  async function handleAudio(files: File[] | null) {
     if (!files || !id || files.length === 0) return
     setBusy(true)
     setError('')
     setMsg('')
     try {
-      const r = await adminApi.uploadAudio(Number(id), Array.from(files), { genre, style })
+      const r = await adminApi.uploadAudio(Number(id), files, { genre, style })
       const n = r.added?.length ?? 0
       setMsg(
         r.isSamplePack
@@ -180,7 +172,6 @@ export function ProductEditor() {
       setError(err instanceof Error ? err.message : 'Upload failed.')
     } finally {
       setBusy(false)
-      if (folderRef.current) folderRef.current.value = ''
     }
   }
 
@@ -200,13 +191,13 @@ export function ProductEditor() {
     }
   }
 
-  async function handleStems(files: FileList | null) {
+  async function handleStems(files: File[] | null) {
     if (!files || !id || files.length === 0) return
     setBusy(true)
     setError('')
     setMsg('')
     try {
-      const r = await adminApi.uploadStems(Number(id), Array.from(files))
+      const r = await adminApi.uploadStems(Number(id), files)
       const n = r.added?.length ?? 0
       setMsg(`${n} stem${n === 1 ? '' : 's'} uploaded, analyzed & sorted. The Trackout/Stems tier is now available.`)
       await loadProduct().catch(() => {})
@@ -451,10 +442,8 @@ export function ProductEditor() {
                 self-describing name, so buyers get an organized trackout on stem-tier purchases.
               </p>
               <div className="adm-uploads">
-                <label className="adm-drop">
-                  <span>Upload stem files</span>
-                  <input type="file" accept="audio/*" multiple onChange={(e) => handleStems(e.target.files)} />
-                </label>
+                <FileDrop label="Stem files" accept="audio/*" multiple disabled={busy} onFiles={handleStems} />
+                <FileDrop label="Stems folder" directory multiple disabled={busy} onFiles={handleStems} />
               </div>
               {product.stems_available !== 0 && (
                 <button className="adm-btn" onClick={handleNoStems} disabled={busy} style={{ marginTop: '0.6rem' }}>
@@ -495,10 +484,11 @@ export function ProductEditor() {
                 </div>
               )}
               <div className="adm-cover__actions">
-                <input
-                  type="file"
+                <FileDrop
+                  label="Cover image"
                   accept="image/*,.heic,.heif"
-                  onChange={(e) => handleCover(e.target.files?.[0])}
+                  disabled={busy}
+                  onFiles={(files) => handleCover(files[0])}
                 />
                 <p className="adm-muted">
                   JPEG, PNG, WebP, GIF, or HEIC (iPhone). We convert &amp; resize automatically.
@@ -522,20 +512,15 @@ export function ProductEditor() {
                   <p className="adm-muted">A single holds exactly one track.</p>
                 )}
                 <div className="adm-uploads">
-                  <label className="adm-drop">
-                    <span>{type === 'single' ? 'Select file' : 'Select files'}</span>
-                    <input
-                      type="file"
-                      accept="audio/*"
-                      multiple={type !== 'single'}
-                      onChange={(e) => handleAudio(e.target.files)}
-                    />
-                  </label>
+                  <FileDrop
+                    label={type === 'single' ? 'Audio file' : 'Audio files'}
+                    accept="audio/*"
+                    multiple={type !== 'single'}
+                    disabled={busy}
+                    onFiles={handleAudio}
+                  />
                   {type !== 'single' && (
-                    <label className="adm-drop">
-                      <span>Select a folder</span>
-                      <input ref={folderRef} type="file" multiple onChange={(e) => handleAudio(e.target.files)} />
-                    </label>
+                    <FileDrop label="Audio folder" directory multiple disabled={busy} onFiles={handleAudio} />
                   )}
                 </div>
                 {busy && (

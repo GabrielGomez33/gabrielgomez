@@ -64,10 +64,17 @@
 .adm-section h3 { font-family: var(--font-display); font-weight: 300; letter-spacing: 0.04em; font-size: 1.15rem; margin-bottom: 1rem; }
 .adm-uploads { display: flex; gap: 1rem; flex-wrap: wrap; }
 .adm-drop {
-  flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 0.6rem; align-items: flex-start;
+  flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-start;
   border: 1px dashed var(--line-strong); border-radius: 6px; padding: 1.2rem;
+  cursor: pointer; transition: border-color 0.15s ease, background 0.15s ease;
 }
+.adm-drop:hover:not(.is-disabled) { border-color: var(--mist); }
+.adm-drop:focus-visible { outline: none; border-color: var(--white); }
+.adm-drop.is-over { border-style: solid; border-color: var(--white); background: rgba(244, 244, 244, 0.06); }
+.adm-drop.is-disabled { opacity: 0.5; cursor: not-allowed; }
 .adm-drop > span { font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--mist); }
+.adm-drop__hint { font-family: var(--font-body) !important; font-size: 0.78rem !important; letter-spacing: 0 !important; text-transform: none !important; color: var(--ash) !important; }
+.adm-drop.is-over .adm-drop__hint { color: var(--mist) !important; }
 
 .adm-inline { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
 .adm-inline input, .adm-inline select { padding: 0.55rem 0.65rem; }
