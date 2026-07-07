@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { adminApi, type Product, type AttrOption, type Variant } from './adminApi'
+import { FileDrop } from './FileDrop'
 
 const TYPES: Record<string, string[]> = {
   music: ['beatpack', 'single', 'album', 'samplepack'],
@@ -64,20 +65,11 @@ export function ProductEditor() {
   const [style, setStyle] = useState('')
   const [notes, setNotes] = useState('')
 
-  const folderRef = useRef<HTMLInputElement>(null)
-
   const opts = (kind: string) => options.filter((o) => o.kind === kind)
 
   useEffect(() => {
     adminApi.options().then(setOptions).catch(() => {})
   }, [])
-
-  useEffect(() => {
-    if (folderRef.current) {
-      folderRef.current.setAttribute('webkitdirectory', '')
-      folderRef.current.setAttribute('directory', '')
-    }
-  }, [product])
 
   const loadProduct = useMemo(
     () => async () => {
@@ -124,11 +116,11 @@ export function ProductEditor() {
     setError('')
     setMsg('')
     try {
-      const single = category === 'music' && type === 'single'
-      // On CREATE a single is priced by the ladder (base = WAV lease); on EDIT the
-      // base is whatever was loaded (tiers are managed in the License tiers section).
+      const ladder = category === 'music' && type === 'single'
+      // On CREATE a single's base price = the WAV lease; on EDIT the base is
+      // whatever was loaded (tiers are managed in the License tiers section).
       const priceCents =
-        single && !editing
+        ladder && !editing
           ? Math.round((parseFloat(tierPrices.wav) || 0) * 100)
           : Math.round((parseFloat(price) || 0) * 100)
       if (editing) {
@@ -146,8 +138,8 @@ export function ProductEditor() {
           priceCents,
           ...(category === 'music' ? { genre, style, notes } : {}),
         })
-        // Seed the license ladder from the create form (singles only).
-        if (single) {
+        // Seed the license ladder from the create form (beats — not sample packs).
+        if (ladder) {
           for (const t of ['wav', 'stems', 'unlimited', 'exclusive'] as const) {
             await adminApi.addTier(p.id, t, Math.round((parseFloat(tierPrices[t]) || 0) * 100))
           }
@@ -162,13 +154,13 @@ export function ProductEditor() {
     }
   }
 
-  async function handleAudio(files: FileList | null) {
+  async function handleAudio(files: File[] | null) {
     if (!files || !id || files.length === 0) return
     setBusy(true)
     setError('')
     setMsg('')
     try {
-      const r = await adminApi.uploadAudio(Number(id), Array.from(files), { genre, style })
+      const r = await adminApi.uploadAudio(Number(id), files, { genre, style })
       const n = r.added?.length ?? 0
       setMsg(
         r.isSamplePack
@@ -180,7 +172,6 @@ export function ProductEditor() {
       setError(err instanceof Error ? err.message : 'Upload failed.')
     } finally {
       setBusy(false)
-      if (folderRef.current) folderRef.current.value = ''
     }
   }
 
@@ -200,13 +191,13 @@ export function ProductEditor() {
     }
   }
 
-  async function handleStems(files: FileList | null) {
+  async function handleStems(files: File[] | null) {
     if (!files || !id || files.length === 0) return
     setBusy(true)
     setError('')
     setMsg('')
     try {
-      const r = await adminApi.uploadStems(Number(id), Array.from(files))
+      const r = await adminApi.uploadStems(Number(id), files)
       const n = r.added?.length ?? 0
       setMsg(`${n} stem${n === 1 ? '' : 's'} uploaded, analyzed & sorted. The Trackout/Stems tier is now available.`)
       await loadProduct().catch(() => {})
@@ -285,11 +276,12 @@ export function ProductEditor() {
 
   const isMusic = category === 'music'
   const isSamplePack = isMusic && type === 'samplepack'
-  const isSingle = isMusic && type === 'single'
+  // Only singles (individual beats) are priced by the license ladder. Beatpacks,
+  // albums, sample packs, and non-music all use a single base price.
+  const usesLadder = isMusic && type === 'single'
 
   // All metadata fields are mandatory. Music additionally needs genre/style.
-  // Singles are priced by the ladder (WAV lease); everything else by base price.
-  const priceOk = isSingle ? parseFloat(tierPrices.wav) > 0 : parseFloat(price) > 0
+  const priceOk = usesLadder ? parseFloat(tierPrices.wav) > 0 : parseFloat(price) > 0
   const basicComplete = Boolean(
     title.trim() && subtitle.trim() && description.trim() && priceOk && (!isMusic || (genre && style)),
   )
@@ -354,7 +346,7 @@ export function ProductEditor() {
           <span>Description</span>
           <textarea rows={4} value={description} onChange={(e) => setDescription(e.target.value)} required />
         </label>
-        {isSingle && !editing ? (
+        {usesLadder && !editing ? (
           <div className="adm-field">
             <span>License prices (USD)</span>
             <div className="adm-ladder">
@@ -380,7 +372,7 @@ export function ProductEditor() {
             </label>
             <p className="adm-muted">These become the license ladder. You can fine-tune them (and upload stems) after creating.</p>
           </div>
-        ) : isSingle ? (
+        ) : usesLadder ? (
           <p className="adm-muted">Licensing &amp; stems are managed in the sections below.</p>
         ) : (
           <label className="adm-field">
@@ -429,13 +421,13 @@ export function ProductEditor() {
 
       {editing && product && (
         <>
-          {/* License ladder — first thing after the basics for music. */}
-          {isMusic && (
+          {/* License ladder — singles only, first thing after the basics. */}
+          {usesLadder && (
             <TierEditor productId={product.id} tiers={product.licenseTiers ?? []} onDone={loadProduct} />
           )}
 
-          {/* Stems / trackouts (individual beats). Feeds the Stems/Unlimited/Exclusive tiers. */}
-          {isMusic && type === 'single' && (
+          {/* Stems / trackouts. Feeds the Stems/Unlimited/Exclusive tiers. */}
+          {usesLadder && (
             <section className="adm-section">
               <h3>Stems / trackouts</h3>
               <p className={product.stems_available === 1 ? 'adm-ok' : 'adm-muted'}>
@@ -450,10 +442,8 @@ export function ProductEditor() {
                 self-describing name, so buyers get an organized trackout on stem-tier purchases.
               </p>
               <div className="adm-uploads">
-                <label className="adm-drop">
-                  <span>Upload stem files</span>
-                  <input type="file" accept="audio/*" multiple onChange={(e) => handleStems(e.target.files)} />
-                </label>
+                <FileDrop label="Stem files" accept="audio/*" multiple disabled={busy} onFiles={handleStems} />
+                <FileDrop label="Stems folder" directory multiple disabled={busy} onFiles={handleStems} />
               </div>
               {product.stems_available !== 0 && (
                 <button className="adm-btn" onClick={handleNoStems} disabled={busy} style={{ marginTop: '0.6rem' }}>
@@ -494,10 +484,11 @@ export function ProductEditor() {
                 </div>
               )}
               <div className="adm-cover__actions">
-                <input
-                  type="file"
+                <FileDrop
+                  label="Cover image"
                   accept="image/*,.heic,.heif"
-                  onChange={(e) => handleCover(e.target.files?.[0])}
+                  disabled={busy}
+                  onFiles={(files) => handleCover(files[0])}
                 />
                 <p className="adm-muted">
                   JPEG, PNG, WebP, GIF, or HEIC (iPhone). We convert &amp; resize automatically.
@@ -521,20 +512,15 @@ export function ProductEditor() {
                   <p className="adm-muted">A single holds exactly one track.</p>
                 )}
                 <div className="adm-uploads">
-                  <label className="adm-drop">
-                    <span>{type === 'single' ? 'Select file' : 'Select files'}</span>
-                    <input
-                      type="file"
-                      accept="audio/*"
-                      multiple={type !== 'single'}
-                      onChange={(e) => handleAudio(e.target.files)}
-                    />
-                  </label>
+                  <FileDrop
+                    label={type === 'single' ? 'Audio file' : 'Audio files'}
+                    accept="audio/*"
+                    multiple={type !== 'single'}
+                    disabled={busy}
+                    onFiles={handleAudio}
+                  />
                   {type !== 'single' && (
-                    <label className="adm-drop">
-                      <span>Select a folder</span>
-                      <input ref={folderRef} type="file" multiple onChange={(e) => handleAudio(e.target.files)} />
-                    </label>
+                    <FileDrop label="Audio folder" directory multiple disabled={busy} onFiles={handleAudio} />
                   )}
                 </div>
                 {busy && (
