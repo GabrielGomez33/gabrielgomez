@@ -486,6 +486,78 @@ router.get('/:id/stems', async (req: Request, res: Response): Promise<void> => {
   res.json({ success: true, stems });
 });
 
+// Re-sort existing stems: re-run analysis on every stem already on disk and move
+// it into the correct group folder (drums/bass/melodic/vocal/fx/other). Lets an
+// improved classifier re-group files without a re-upload. Filenames are kept
+// (they're already self-describing); only the group folder may change.
+router.post('/:id/stems/resort', async (req: Request, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  const product = await products.getProductById(id);
+  if (!product || product.category !== 'music') {
+    res.status(404).json({ success: false, error: 'Music product not found.' });
+    return;
+  }
+  const base = path.join(productDir(id), 'masters', 'stems');
+  if (!fs.existsSync(base)) {
+    res.json({ success: true, moved: 0, total: 0 });
+    return;
+  }
+
+  // Collect every stem file (inside group folders + any loose files at the base).
+  const files: string[] = [];
+  for (const entry of fs.readdirSync(base)) {
+    const abs = path.join(base, entry);
+    try {
+      if (fs.statSync(abs).isDirectory()) {
+        for (const file of fs.readdirSync(abs)) {
+          const fabs = path.join(abs, file);
+          if (fs.statSync(fabs).isFile() && AUDIO_EXT.has(path.extname(file).toLowerCase())) files.push(fabs);
+        }
+      } else if (AUDIO_EXT.has(path.extname(entry).toLowerCase())) {
+        files.push(abs);
+      }
+    } catch {
+      /* skip unreadable */
+    }
+  }
+
+  let moved = 0;
+  for (const abs of files) {
+    const filename = path.basename(abs);
+    let durationSec: number | null = null;
+    try {
+      durationSec = (await probe(abs)).durationSec;
+    } catch {
+      /* non-fatal */
+    }
+    const analysis = await analyzeAudio({ filename, durationSec, absFile: abs, useDsp: DSP_ENABLED });
+    const group = analysis.group || 'other';
+    const currentGroup = path.basename(path.dirname(abs));
+    if (currentGroup === group && path.dirname(abs) !== base) continue; // already in place
+    const destDir = path.join(base, group);
+    ensureDir(destDir);
+    const finalName = uniqueInDir(destDir, filename);
+    try {
+      fs.renameSync(abs, path.join(destDir, finalName));
+      moved += 1;
+    } catch (err) {
+      console.error('[uploads] stem re-sort move failed:', err instanceof Error ? err.message : err);
+    }
+  }
+
+  // Prune any group folders left empty after moves.
+  for (const entry of fs.readdirSync(base)) {
+    const abs = path.join(base, entry);
+    try {
+      if (fs.statSync(abs).isDirectory() && fs.readdirSync(abs).length === 0) fs.rmdirSync(abs);
+    } catch {
+      /* best effort */
+    }
+  }
+
+  res.json({ success: true, moved, total: files.length });
+});
+
 // Flag a product as having no stems available (legacy) — greys out the Stems tier.
 router.post('/:id/stems/none', async (req: Request, res: Response): Promise<void> => {
   const id = Number(req.params.id);

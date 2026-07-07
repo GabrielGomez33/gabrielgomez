@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { adminApi, type Product, type AttrOption, type Variant } from './adminApi'
-import { FileDrop } from './FileDrop'
+import { FileDrop, Spinner } from './FileDrop'
 
 const TYPES: Record<string, string[]> = {
   music: ['beatpack', 'single', 'album', 'samplepack'],
@@ -16,6 +16,13 @@ const STANDARD_TIERS: { tier: string; label: string; price: number }[] = [
   { tier: 'unlimited', label: 'Unlimited', price: 250 },
   { tier: 'exclusive', label: 'Exclusive', price: 600 },
 ]
+
+// Sensible display order for sample/stem groups (matches the analysis groups).
+const GROUP_ORDER = ['drums', 'bass', 'melodic', 'vocal', 'fx', 'other']
+function groupOrder(g: string): number {
+  const i = GROUP_ORDER.indexOf(g)
+  return i < 0 ? 99 : i
+}
 
 function fmtSecs(s: number | null): string {
   if (!s) return '—'
@@ -204,6 +211,27 @@ export function ProductEditor() {
       await loadStems()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Stems upload failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleResortStems() {
+    if (!id) return
+    setBusy(true)
+    setError('')
+    setMsg('')
+    try {
+      const r = await adminApi.resortStems(Number(id))
+      setMsg(
+        r.moved > 0
+          ? `Re-sorted stems — ${r.moved} of ${r.total} moved into the right group.`
+          : `Stems re-checked — all ${r.total} were already grouped correctly.`,
+      )
+      await loadProduct().catch(() => {})
+      await loadStems()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Re-sort failed.')
     } finally {
       setBusy(false)
     }
@@ -414,7 +442,7 @@ export function ProductEditor() {
         )}
 
         <button className="adm-btn adm-btn--primary" type="submit" disabled={busy || !basicComplete}>
-          {editing ? 'Save changes' : 'Create product'}
+          {busy ? <Spinner label={editing ? 'Saving…' : 'Creating…'} /> : editing ? 'Save changes' : 'Create product'}
         </button>
         {!basicComplete && <p className="adm-muted">All fields are required.</p>}
       </form>
@@ -445,11 +473,19 @@ export function ProductEditor() {
                 <FileDrop label="Stem files" accept="audio/*" multiple disabled={busy} onFiles={handleStems} />
                 <FileDrop label="Stems folder" directory multiple disabled={busy} onFiles={handleStems} />
               </div>
-              {product.stems_available !== 0 && (
-                <button className="adm-btn" onClick={handleNoStems} disabled={busy} style={{ marginTop: '0.6rem' }}>
-                  No stems available (legacy)
-                </button>
-              )}
+              {busy && <Spinner label="Analyzing & sorting stems (BPM, key, group)…" />}
+              <div className="adm-inline" style={{ marginTop: '0.6rem' }}>
+                {stems.length > 0 && (
+                  <button className="adm-btn" onClick={handleResortStems} disabled={busy}>
+                    Re-sort existing stems
+                  </button>
+                )}
+                {product.stems_available !== 0 && (
+                  <button className="adm-btn" onClick={handleNoStems} disabled={busy}>
+                    No stems available (legacy)
+                  </button>
+                )}
+              </div>
               {stems.length > 0 && (
                 <div className="adm-stems">
                   {Object.entries(
@@ -457,7 +493,9 @@ export function ProductEditor() {
                       ;(acc[s.group] ||= []).push(s.name)
                       return acc
                     }, {}),
-                  ).map(([group, names]) => (
+                  )
+                    .sort((a, b) => groupOrder(a[0]) - groupOrder(b[0]))
+                    .map(([group, names]) => (
                     <div key={group} className="adm-samplegroup">
                       <h4 className="adm-samplegroup__title">{group} <span>({names.length})</span></h4>
                       <ul className="adm-inline-list">
@@ -493,6 +531,7 @@ export function ProductEditor() {
                 <p className="adm-muted">
                   JPEG, PNG, WebP, GIF, or HEIC (iPhone). We convert &amp; resize automatically.
                 </p>
+                {busy && <Spinner label="Uploading & processing cover…" />}
               </div>
             </div>
           </section>
@@ -524,9 +563,9 @@ export function ProductEditor() {
                   )}
                 </div>
                 {busy && (
-                  <p className="adm-muted">
-                    Processing (ffprobe + analysis{isSamplePack ? '' : ' + preview + waveform'})… large folders take a moment.
-                  </p>
+                  <Spinner
+                    label={`Processing (ffprobe + analysis${isSamplePack ? '' : ' + preview + waveform'})… large folders take a moment.`}
+                  />
                 )}
                 {(product.tracks?.length ?? 0) > 0 && (
                   <div className="adm-reanalyze">
@@ -617,8 +656,6 @@ export function ProductEditor() {
   )
 }
 
-const GROUP_ORDER = ['drums', 'bass', 'melodic', 'vocal', 'fx', 'other']
-
 function SamplePackEditor({
   product,
   onDone,
@@ -642,11 +679,7 @@ function SamplePackEditor({
       if (!map.has(g)) map.set(g, [])
       map.get(g)!.push(t)
     }
-    const ord = (g: string) => {
-      const i = GROUP_ORDER.indexOf(g)
-      return i < 0 ? 99 : i
-    }
-    return [...map.entries()].sort((a, b) => ord(a[0]) - ord(b[0]))
+    return [...map.entries()].sort((a, b) => groupOrder(a[0]) - groupOrder(b[0]))
   }, [tracks])
 
   async function autoPick() {
