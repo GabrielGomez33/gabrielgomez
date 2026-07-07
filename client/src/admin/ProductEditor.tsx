@@ -124,11 +124,11 @@ export function ProductEditor() {
     setError('')
     setMsg('')
     try {
-      const single = category === 'music' && type === 'single'
-      // On CREATE a single is priced by the ladder (base = WAV lease); on EDIT the
-      // base is whatever was loaded (tiers are managed in the License tiers section).
+      const ladder = category === 'music' && type === 'single'
+      // On CREATE a single's base price = the WAV lease; on EDIT the base is
+      // whatever was loaded (tiers are managed in the License tiers section).
       const priceCents =
-        single && !editing
+        ladder && !editing
           ? Math.round((parseFloat(tierPrices.wav) || 0) * 100)
           : Math.round((parseFloat(price) || 0) * 100)
       if (editing) {
@@ -146,8 +146,8 @@ export function ProductEditor() {
           priceCents,
           ...(category === 'music' ? { genre, style, notes } : {}),
         })
-        // Seed the license ladder from the create form (singles only).
-        if (single) {
+        // Seed the license ladder from the create form (beats — not sample packs).
+        if (ladder) {
           for (const t of ['wav', 'stems', 'unlimited', 'exclusive'] as const) {
             await adminApi.addTier(p.id, t, Math.round((parseFloat(tierPrices[t]) || 0) * 100))
           }
@@ -285,11 +285,12 @@ export function ProductEditor() {
 
   const isMusic = category === 'music'
   const isSamplePack = isMusic && type === 'samplepack'
-  const isSingle = isMusic && type === 'single'
+  // Only singles (individual beats) are priced by the license ladder. Beatpacks,
+  // albums, sample packs, and non-music all use a single base price.
+  const usesLadder = isMusic && type === 'single'
 
   // All metadata fields are mandatory. Music additionally needs genre/style.
-  // Singles are priced by the ladder (WAV lease); everything else by base price.
-  const priceOk = isSingle ? parseFloat(tierPrices.wav) > 0 : parseFloat(price) > 0
+  const priceOk = usesLadder ? parseFloat(tierPrices.wav) > 0 : parseFloat(price) > 0
   const basicComplete = Boolean(
     title.trim() && subtitle.trim() && description.trim() && priceOk && (!isMusic || (genre && style)),
   )
@@ -354,7 +355,7 @@ export function ProductEditor() {
           <span>Description</span>
           <textarea rows={4} value={description} onChange={(e) => setDescription(e.target.value)} required />
         </label>
-        {isSingle && !editing ? (
+        {usesLadder && !editing ? (
           <div className="adm-field">
             <span>License prices (USD)</span>
             <div className="adm-ladder">
@@ -380,7 +381,7 @@ export function ProductEditor() {
             </label>
             <p className="adm-muted">These become the license ladder. You can fine-tune them (and upload stems) after creating.</p>
           </div>
-        ) : isSingle ? (
+        ) : usesLadder ? (
           <p className="adm-muted">Licensing &amp; stems are managed in the sections below.</p>
         ) : (
           <label className="adm-field">
@@ -429,13 +430,13 @@ export function ProductEditor() {
 
       {editing && product && (
         <>
-          {/* License ladder — first thing after the basics for music. */}
-          {isMusic && (
+          {/* License ladder — singles only, first thing after the basics. */}
+          {usesLadder && (
             <TierEditor productId={product.id} tiers={product.licenseTiers ?? []} onDone={loadProduct} />
           )}
 
-          {/* Stems / trackouts (individual beats). Feeds the Stems/Unlimited/Exclusive tiers. */}
-          {isMusic && type === 'single' && (
+          {/* Stems / trackouts. Feeds the Stems/Unlimited/Exclusive tiers. */}
+          {usesLadder && (
             <section className="adm-section">
               <h3>Stems / trackouts</h3>
               <p className={product.stems_available === 1 ? 'adm-ok' : 'adm-muted'}>
