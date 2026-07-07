@@ -211,4 +211,7 @@ export const adminApi = {
   flagNoStems(id: number): Promise<unknown> {
     return jsonReq(`/admin/products/${id}/stems/none`, 'POST')
   },
+  resortStems(id: number): Promise<{ moved: number; total: number }> {
+    return jsonReq(`/admin/products/${id}/stems/resort`, 'POST')
+  },
 }

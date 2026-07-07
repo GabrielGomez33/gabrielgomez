@@ -50,7 +50,7 @@ const CATEGORY_RULES: Array<{ category: string; group: string; kw: RegExp }> = [
   { category: 'arp', group: 'melodic', kw: /\b(arp|arpeggio|sequence|seq)\b/i },
   { category: 'bell', group: 'melodic', kw: /\b(bell|mallet|glock|kalimba)\b/i },
   { category: 'melody', group: 'melodic', kw: /\b(melody|melodic|loop|riff|top|topline)\b/i },
-  { category: 'vocal', group: 'vocal', kw: /\b(vocal|vox|voice|acapella|acappella|adlib|ad[-_ ]?lib|libs?|chant|choir|choral|gospel|phrase|harmon(y|ies|ize)|hum|humming|whoo+p?|ooh+|aah+|ahh+|oh+|shout|yell|moan|breath|bgv|backing)\b/i },
+  { category: 'vocal', group: 'vocal', kw: /\b(vocal|vox|voice|acapella|acappella|adlib|ad[-_ ]?lib|libs?|dubs?|double[sd]?|stacks?|chant|choir|choral|gospel|phrase|harmon(y|ies|ize)|hum|humming|whoo+p?|ooh+|aah+|ahh+|oh+|shout|yell|moan|breath|bgv|backing|lead[-_ ]?vox|verse|chorus|hook|rap|sung|sing)\b/i },
   { category: 'riser', group: 'fx', kw: /\b(riser|uplifter|sweep|rise)\b/i },
   { category: 'impact', group: 'fx', kw: /\b(impact|hit|boom|downlifter|downshifter|slam)\b/i },
   { category: 'fx', group: 'fx', kw: /\b(fx|effect|texture|foley|noise|glitch|transition|whoosh|reverse)\b/i },

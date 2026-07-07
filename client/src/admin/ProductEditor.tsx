@@ -216,6 +216,27 @@ export function ProductEditor() {
     }
   }
 
+  async function handleResortStems() {
+    if (!id) return
+    setBusy(true)
+    setError('')
+    setMsg('')
+    try {
+      const r = await adminApi.resortStems(Number(id))
+      setMsg(
+        r.moved > 0
+          ? `Re-sorted stems — ${r.moved} of ${r.total} moved into the right group.`
+          : `Stems re-checked — all ${r.total} were already grouped correctly.`,
+      )
+      await loadProduct().catch(() => {})
+      await loadStems()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Re-sort failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function handleNoStems() {
     if (!id || !confirm('Flag this beat as having NO stems available? The Trackout/Stems tier will be greyed out in the store.')) return
     setBusy(true)
@@ -453,11 +474,18 @@ export function ProductEditor() {
                 <FileDrop label="Stems folder" directory multiple disabled={busy} onFiles={handleStems} />
               </div>
               {busy && <Spinner label="Analyzing & sorting stems (BPM, key, group)…" />}
-              {product.stems_available !== 0 && (
-                <button className="adm-btn" onClick={handleNoStems} disabled={busy} style={{ marginTop: '0.6rem' }}>
-                  No stems available (legacy)
-                </button>
-              )}
+              <div className="adm-inline" style={{ marginTop: '0.6rem' }}>
+                {stems.length > 0 && (
+                  <button className="adm-btn" onClick={handleResortStems} disabled={busy}>
+                    Re-sort existing stems
+                  </button>
+                )}
+                {product.stems_available !== 0 && (
+                  <button className="adm-btn" onClick={handleNoStems} disabled={busy}>
+                    No stems available (legacy)
+                  </button>
+                )}
+              </div>
               {stems.length > 0 && (
                 <div className="adm-stems">
                   {Object.entries(
