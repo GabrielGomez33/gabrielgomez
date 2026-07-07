@@ -42,6 +42,7 @@ export interface Product {
   currency: string
   status: 'draft' | 'published' | 'archived'
   is_digital: number
+  stems_available?: number | null
   cover_image_path: string | null
   cover_thumb_path?: string | null
   coverUrl?: string | null
@@ -195,5 +196,16 @@ export const adminApi = {
     const data = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error((data as { error?: string }).error || 'Cover upload failed')
     return data
+  },
+  async uploadStems(id: number, files: File[]): Promise<{ added: number }> {
+    const fd = new FormData()
+    for (const f of files) fd.append('files', f)
+    const res = await fetch(`${BASE}/admin/products/${id}/stems`, { method: 'POST', headers: authHeader(), body: fd })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error((data as { error?: string }).error || 'Stems upload failed')
+    return data as { added: number }
+  },
+  flagNoStems(id: number): Promise<unknown> {
+    return jsonReq(`/admin/products/${id}/stems/none`, 'POST')
   },
 }

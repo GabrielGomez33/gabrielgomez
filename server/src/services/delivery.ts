@@ -24,6 +24,14 @@ export interface GrantRow extends RowDataPacket {
   max_downloads: number;
   download_count: number;
   expires_at: string;
+  license_tier: string | null; // from the order item — decides stems delivery
+}
+
+// Which tiers receive the trackout/stems folder in their download.
+const STEMS_TIERS = new Set(['stems', 'unlimited', 'exclusive']);
+export function tierIncludesStems(tier: string | null): boolean {
+  // Non-tiered products (sample packs, beatpacks) get everything; a WAV lease does not.
+  return !tier || STEMS_TIERS.has(tier);
 }
 
 /** Create one download grant per digital line of a paid order. Returns tokens. */
@@ -64,7 +72,13 @@ export async function revokeOrderGrants(orderId: number): Promise<void> {
 }
 
 export async function getGrantByToken(token: string): Promise<GrantRow | null> {
-  const rows = await query<GrantRow[]>('SELECT * FROM download_grants WHERE token = ?', [token]);
+  const rows = await query<GrantRow[]>(
+    `SELECT dg.*, oi.license_tier
+       FROM download_grants dg
+       JOIN order_items oi ON oi.id = dg.order_item_id
+      WHERE dg.token = ?`,
+    [token],
+  );
   return rows[0] ?? null;
 }
 
@@ -80,8 +94,12 @@ export async function claimDownload(grantId: number): Promise<boolean> {
   return result.affectedRows === 1;
 }
 
-/** Stream a zip of every master file in the grant's directory to the response. */
-export function streamZip(res: Response, storageRelDir: string, downloadName: string): void {
+/**
+ * Stream a zip of the grant's directory. `includeStems` controls whether the
+ * `stems/` subfolder (trackouts) is bundled — excluded for WAV leases, included
+ * for Stems/Unlimited/Exclusive and non-tiered products.
+ */
+export function streamZip(res: Response, storageRelDir: string, downloadName: string, includeStems = true): void {
   let absDir: string;
   try {
     absDir = resolveInStorage(storageRelDir);
@@ -103,8 +121,12 @@ export function streamZip(res: Response, storageRelDir: string, downloadName: st
     if (!res.headersSent) res.status(500).end();
   });
   archive.pipe(res);
-  // Recurse so sample-pack folder structure (drums/…, loops/…) is preserved in
-  // the zip, not flattened. `false` = no extra top-level wrapper directory.
-  archive.directory(absDir, false);
+  if (includeStems) {
+    // Recurse so folder structure (drums/…, loops/…, stems/…) is preserved.
+    archive.directory(absDir, false);
+  } else {
+    // WAV lease: everything except the stems/ subfolder.
+    archive.glob('**/*', { cwd: absDir, ignore: ['stems/**', 'stems'], dot: false, nodir: true });
+  }
   archive.finalize();
 }

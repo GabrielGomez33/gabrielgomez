@@ -340,3 +340,6 @@
 .checkout__agree a { color: var(--white); text-decoration: underline; text-underline-offset: 2px; }
 .cartline__license { font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.06em; color: var(--fog); }
 .checkout__license { color: var(--ash); font-family: var(--font-mono); font-size: 0.72rem; }
+.pdetail__tier.is-unavailable { opacity: 0.5; cursor: not-allowed; border-style: dashed; }
+.pdetail__tier.is-unavailable:hover { border-color: var(--line); }
+.pdetail__tier.is-unavailable .pdetail__tier-price { color: var(--ash); }

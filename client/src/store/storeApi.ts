@@ -49,6 +49,7 @@ export interface ProductSummary {
   price_cents: number
   currency: string
   is_digital: number
+  stems_available?: number | null
   coverUrl: string | null
   coverThumbUrl?: string | null
   genre?: string | null
