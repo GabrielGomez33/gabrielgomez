@@ -80,12 +80,19 @@ function previewArgs(masterAbs: string, seconds: number, tagFile?: string, start
   // plays from its own start), so the preview is cut from `startSec`.
   const seek = startSec > 0 ? ['-ss', String(startSec)] : [];
   if (tagFile && fs.existsSync(tagFile)) {
-    // Tag plays ONCE at the start (no aloop), mixed over the beat; output is
+    // Tag plays ONCE at the start (no aloop), summed over the beat; output is
     // trimmed to `seconds` from the seek point.
+    //
+    // normalize=0 is critical: without it, amix scales the output by the number
+    // of *currently active* inputs, so the master plays at ~half gain while the
+    // short tag is present and then jumps to full the instant the tag ends
+    // (~3-4s in) — an audible volume spike. With normalize=0 the master keeps
+    // its natural level throughout and the tag is simply summed on top; a final
+    // limiter catches any transient clipping during the brief tag overlap.
     return [
       '-y', ...seek, '-i', masterAbs, '-i', tagFile,
       '-filter_complex',
-      '[1:a]volume=0.6[t];[0:a][t]amix=inputs=2:duration=first:dropout_transition=0[a]',
+      '[1:a]volume=0.55[t];[0:a][t]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[m];[m]alimiter=limit=0.95[a]',
       '-map', '[a]', '-t', String(seconds), '-ac', '2', '-ar', '44100', '-b:a', '96k',
     ];
   }
