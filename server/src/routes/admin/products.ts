@@ -3,6 +3,7 @@ import { requireAdmin } from '../../auth/middleware';
 import * as products from '../../services/products';
 import { createCatalogProduct, isPayPalConfigured } from '../../services/paypal';
 import { signCoverToken } from '../../services/previewToken';
+import { coverVersion } from '../store/catalog';
 
 const router = express.Router();
 router.use(requireAdmin); // everything here is admin-only
@@ -12,17 +13,20 @@ const API_BASE = '/GabrielGomez/api';
 
 // Attach cover URLs carrying a short-lived token, so the admin UI can preview a
 // draft product's cover with a plain <img> (which can't send an auth header).
-function withCover<T extends { id: number; cover_image_path?: string | null; cover_thumb_path?: string | null }>(
-  row: T,
-): T & { coverUrl: string | null; coverThumbUrl: string | null } {
+function withCover<
+  T extends { id: number; cover_image_path?: string | null; cover_thumb_path?: string | null; updated_at?: unknown },
+>(row: T): T & { coverUrl: string | null; coverThumbUrl: string | null } {
   const ct = signCoverToken(row.id);
+  // &v bumps whenever the product (incl. its cover) changes, so a re-uploaded
+  // cover isn't masked by a cached image in the admin preview.
+  const v = coverVersion(row.updated_at);
   return {
     ...row,
-    coverUrl: row.cover_image_path ? `${API_BASE}/store/cover/${row.id}?ct=${ct}` : null,
+    coverUrl: row.cover_image_path ? `${API_BASE}/store/cover/${row.id}?ct=${ct}&v=${v}` : null,
     coverThumbUrl: row.cover_thumb_path
-      ? `${API_BASE}/store/cover/${row.id}?size=thumb&ct=${ct}`
+      ? `${API_BASE}/store/cover/${row.id}?size=thumb&ct=${ct}&v=${v}`
       : row.cover_image_path
-        ? `${API_BASE}/store/cover/${row.id}?ct=${ct}`
+        ? `${API_BASE}/store/cover/${row.id}?ct=${ct}&v=${v}`
         : null,
   };
 }

@@ -11,11 +11,22 @@ const router = express.Router();
 
 const API_BASE = '/GabrielGomez/api';
 
-function coverUrl(row: { id: number; cover_image_path: string | null }): string | null {
-  return row.cover_image_path ? `${API_BASE}/store/cover/${row.id}` : null;
+// A cache-busting version token from the product's updated_at. The public cover
+// URL is keyed only by product id (the file is always cover.webp), so without
+// this a re-uploaded cover keeps the same URL and browsers / the PWA service
+// worker keep serving the cached image. updated_at bumps on every product
+// update (incl. cover upload), so the token changes exactly when it should.
+export function coverVersion(updatedAt: unknown): string {
+  if (updatedAt instanceof Date) return String(updatedAt.getTime());
+  const s = String(updatedAt ?? '');
+  const t = Date.parse(s.replace(' ', 'T'));
+  return Number.isFinite(t) ? String(t) : s.replace(/\D/g, '');
 }
-function coverThumbUrl(row: { id: number; cover_thumb_path: string | null }): string | null {
-  return row.cover_thumb_path ? `${API_BASE}/store/cover/${row.id}?size=thumb` : null;
+function coverUrl(row: { id: number; cover_image_path: string | null; updated_at?: unknown }): string | null {
+  return row.cover_image_path ? `${API_BASE}/store/cover/${row.id}?v=${coverVersion(row.updated_at)}` : null;
+}
+function coverThumbUrl(row: { id: number; cover_thumb_path: string | null; updated_at?: unknown }): string | null {
+  return row.cover_thumb_path ? `${API_BASE}/store/cover/${row.id}?size=thumb&v=${coverVersion(row.updated_at)}` : null;
 }
 
 // Strip internal file paths from a track and attach a signed preview URL so the
